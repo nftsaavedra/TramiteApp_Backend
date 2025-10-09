@@ -1,0 +1,73 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Definimos los roles que puede tener un usuario.
+enum Role {
+  OPERADOR
+  SUPERVISOR
+}
+
+model User {
+  id        String   @id @default(cuid()) // Usamos CUID para IDs únicos y seguros.
+  email     String   @unique
+  name      String
+  password  String
+  role      Role     @default(OPERADOR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relación: Un usuario puede registrar muchos movimientos.
+  movements Movement[]
+
+  @@map("users") // Mapea este modelo a una tabla llamada "users" en la BD.
+}
+
+model Account {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  balance   Decimal   @db.Decimal(12, 2) // Usamos Decimal para precisión monetaria (12 dígitos totales, 2 decimales).
+  type      String    // Ej: "FISICA", "DIGITAL"
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relación: Una cuenta puede ser el origen de muchos movimientos.
+  movementsFrom Movement[] @relation("MovementOrigin")
+  // Relación: Una cuenta puede ser el destino de muchos movimientos.
+  movementsTo   Movement[] @relation("MovementDestination")
+
+  @@map("accounts")
+}
+
+model Movement {
+  id          String    @id @default(cuid())
+  amount      Decimal   @db.Decimal(12, 2)
+  description String?   // El '?' lo hace opcional.
+  createdAt   DateTime  @default(now())
+
+  // --- Relaciones ---
+  // Con el usuario que registró el movimiento
+  user    User   @relation(fields: [userId], references: [id])
+  userId  String
+
+  // Con la cuenta de origen
+  originAccount   Account @relation("MovementOrigin", fields: [originAccountId], references: [id])
+  originAccountId String
+
+  // Con la cuenta de destino
+  destinationAccount   Account @relation("MovementDestination", fields: [destinationAccountId], references: [id])
+  destinationAccountId String
+
+  @@map("movements")
+}
