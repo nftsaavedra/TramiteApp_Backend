@@ -7,7 +7,7 @@ import {
   IsUUID,
   MinLength,
 } from 'class-validator';
-import { TipoOficina } from '@prisma/client'; // <-- AÑADIDO: Importamos nuestro Enum
+import { TipoOficina } from '@prisma/client';
 
 export class CreateOficinaDto {
   @IsString()

@@ -1,9 +1,20 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  UseGuards,
+} from '@nestjs/common';
 import { TiposDocumentoService } from './tipos-documento.service';
 import { CreateTiposDocumentoDto } from './dto/create-tipos-documento.dto';
 import { UpdateTiposDocumentoDto } from './dto/update-tipos-documento.dto';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth/jwt-auth.guard'; // <-- AÑADIDO: Importamos el Guard
 
 @Controller('tipos-documento')
+@UseGuards(JwtAuthGuard) // <-- AÑADIDO: Protegemos todas las rutas del controlador
 export class TiposDocumentoController {
   constructor(private readonly tiposDocumentoService: TiposDocumentoService) {}
 
@@ -19,16 +30,22 @@ export class TiposDocumentoController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.tiposDocumentoService.findOne(+id);
+    // --- CORREGIDO: Se eliminó el '+' de '+id' ---
+    return this.tiposDocumentoService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateTiposDocumentoDto: UpdateTiposDocumentoDto) {
-    return this.tiposDocumentoService.update(+id, updateTiposDocumentoDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateTiposDocumentoDto: UpdateTiposDocumentoDto,
+  ) {
+    // --- CORREGIDO: Se eliminó el '+' de '+id' ---
+    return this.tiposDocumentoService.update(id, updateTiposDocumentoDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.tiposDocumentoService.remove(+id);
+    // --- CORREGIDO: Se eliminó el '+' de '+id' ---
+    return this.tiposDocumentoService.remove(id);
   }
 }

@@ -1,4 +1,10 @@
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 
 export class CreateTiposDocumentoDto {
   @IsString()
@@ -9,10 +15,6 @@ export class CreateTiposDocumentoDto {
   @IsString()
   @IsOptional()
   descripcion?: string;
-
-  @IsString()
-  @IsOptional()
-  plantilla?: string; // Ejemplo: {TIPO}-{CORRELATIVO}-{ANIO}
 
   @IsBoolean()
   @IsOptional()
