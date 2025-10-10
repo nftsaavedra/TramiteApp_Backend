@@ -11,10 +11,10 @@ import {
 import { TiposDocumentoService } from './tipos-documento.service';
 import { CreateTiposDocumentoDto } from './dto/create-tipos-documento.dto';
 import { UpdateTiposDocumentoDto } from './dto/update-tipos-documento.dto';
-import { JwtAuthGuard } from '@/common/guards/jwt-auth/jwt-auth.guard'; // <-- AÑADIDO: Importamos el Guard
+import { JwtAuthGuard } from '@/common/guards/jwt-auth/jwt-auth.guard';
 
 @Controller('tipos-documento')
-@UseGuards(JwtAuthGuard) // <-- AÑADIDO: Protegemos todas las rutas del controlador
+@UseGuards(JwtAuthGuard)
 export class TiposDocumentoController {
   constructor(private readonly tiposDocumentoService: TiposDocumentoService) {}
 
