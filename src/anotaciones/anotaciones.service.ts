@@ -1,26 +1,86 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { CreateAnotacioneDto } from './dto/create-anotacione.dto';
 import { UpdateAnotacioneDto } from './dto/update-anotacione.dto';
+import { PrismaService } from '@/prisma/prisma.service';
+import { User } from '@prisma/client';
 
 @Injectable()
 export class AnotacionesService {
-  create(createAnotacioneDto: CreateAnotacioneDto) {
-    return 'This action adds a new anotacione';
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(createAnotacioneDto: CreateAnotacioneDto, autorId: string) {
+    const { tramiteId, contenido } = createAnotacioneDto;
+
+    // Verificamos que el trámite exista antes de añadirle una anotación
+    await this.prisma.tramite.findUniqueOrThrow({ where: { id: tramiteId } });
+
+    return this.prisma.anotacion.create({
+      data: {
+        contenido,
+        tramiteId,
+        autorId,
+      },
+    });
   }
 
-  findAll() {
-    return `This action returns all anotaciones`;
+  // Las anotaciones se buscarán principalmente por trámite
+  async findAllByTramite(tramiteId: string) {
+    return this.prisma.anotacion.findMany({
+      where: { tramiteId },
+      include: {
+        autor: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} anotacione`;
+  async findOne(id: string) {
+    const anotacion = await this.prisma.anotacion.findUnique({
+      where: { id },
+    });
+    if (!anotacion) {
+      throw new NotFoundException(`Anotación con ID "${id}" no encontrada.`);
+    }
+    return anotacion;
   }
 
-  update(id: number, updateAnotacioneDto: UpdateAnotacioneDto) {
-    return `This action updates a #${id} anotacione`;
+  // Solo el autor original puede editar su anotación
+  async update(
+    id: string,
+    updateAnotacioneDto: UpdateAnotacioneDto,
+    user: User,
+  ) {
+    const anotacion = await this.findOne(id);
+    if (anotacion.autorId !== user.id) {
+      throw new UnauthorizedException(
+        'No tiene permiso para editar esta anotación.',
+      );
+    }
+    return this.prisma.anotacion.update({
+      where: { id },
+      data: updateAnotacioneDto,
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} anotacione`;
+  // Solo el autor original o un ADMIN pueden eliminar
+  async remove(id: string, user: User) {
+    const anotacion = await this.findOne(id);
+    if (anotacion.autorId !== user.id && user.role !== 'ADMIN') {
+      throw new UnauthorizedException(
+        'No tiene permiso para eliminar esta anotación.',
+      );
+    }
+    await this.prisma.anotacion.delete({
+      where: { id },
+    });
+    return { message: 'Anotación eliminada exitosamente.' };
   }
 }
