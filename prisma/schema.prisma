@@ -1,3 +1,5 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
@@ -14,23 +16,19 @@ datasource db {
 // -------------------
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      Role     @default(RECEPCIONISTA)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relaciones
-  oficina   Oficina?     @relation(fields: [oficinaId], references: [id])
-  oficinaId String? // Todos los usuarios pertenecerán a una oficina de VPIN
-
+  id                 String       @id @default(cuid())
+  email              String       @unique
+  name               String
+  password           String
+  role               Role         @default(RECEPCIONISTA)
+  isActive           Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  oficina            Oficina?     @relation(fields: [oficinaId], references: [id])
+  oficinaId          String?
   movimientosCreados Movimiento[]
-  tramitesAsignados  Tramite[]     @relation("TramitesAsignados")
+  tramitesAsignados  Tramite[]    @relation("TramitesAsignados")
   anotacionesCreadas Anotacion[]
-  
   @@map("users")
 }
 
@@ -46,98 +44,63 @@ enum Role {
 // -------------------
 
 model Oficina {
-  id        String   @id @default(cuid())
-  nombre    String   @unique
-  siglas    String   @unique
-  tipo      String 
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // --- MEJORA: Relación para la jerarquía de oficinas ---
-  parentId  String?
-  parent    Oficina?  @relation("JerarquiaOficinas", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children  Oficina[] @relation("JerarquiaOficinas")
-  // ----------------------------------------------------
-
-  // Relaciones
-  usuarios             User[]
-  tramitesOriginados   Tramite[]
-  movimientosOrigen    Movimiento[]
-  movimientosDestino   MovimientoDestino[]
-  correlativos         DocumentoCorrelativo[]
-
+  id                 String              @id @default(cuid())
+  nombre             String              @unique
+  siglas             String              @unique
+  tipo               String
+  isActive           Boolean             @default(true)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  parentId           String?
+  parent             Oficina?            @relation("JerarquiaOficinas", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children           Oficina[]           @relation("JerarquiaOficinas")
+  usuarios           User[]
+  tramitesOriginados Tramite[]
+  movimientosOrigen  Movimiento[]
+  movimientosDestino MovimientoDestino[]
   @@map("oficinas")
 }
 
 model TipoDocumento {
-  id            String   @id @default(cuid())
-  nombre        String   @unique
-  descripcion   String?
-  plantilla     String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  // Relaciones
-  tramites      Tramite[]
-  movimientos   Movimiento[] // Relación para los documentos de movimiento
-  correlativos  DocumentoCorrelativo[]
-
+  id          String       @id @default(cuid())
+  nombre      String       @unique
+  descripcion String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  tramites    Tramite[]
+  movimientos Movimiento[]
   @@map("tipos_documento")
 }
-
-model DocumentoCorrelativo {
-  id              String   @id @default(cuid())
-  anio            Int
-  correlativo     Int      @default(0)
-  
-  oficina         Oficina       @relation(fields: [oficinaId], references: [id])
-  oficinaId       String
-
-  tipoDocumento   TipoDocumento @relation(fields: [tipoDocumentoId], references: [id])
-  tipoDocumentoId String
-  
-  updatedAt       DateTime @updatedAt
-
-  @@unique([anio, oficinaId, tipoDocumentoId])
-  @@map("documento_correlativos")
-}
-
 
 // -------------------
 // Modelos del Core de Trámites
 // -------------------
 
 model Tramite {
-  id                      String   @id @default(cuid())
-  numeroDocumentoCompleto String
-  correlativo             Int
-  anio                    Int
+  id                      String           @id @default(cuid())
+  // --- AJUSTE: Campos para el número de documento ---
+  numeroDocumento         String // El 'XXX' que ingresa el usuario
+  numeroDocumentoCompleto String // El nombre completo generado por el sistema
+  // ----------------------------------------------------
   asunto                  String
   notas                   String?
   observaciones           String?
-  estado                  EstadoTramite @default(ABIERTO)
+  estado                  EstadoTramite    @default(ABIERTO)
   prioridad               PrioridadTramite @default(NORMAL)
   fechaDocumento          DateTime
-  fechaIngreso            DateTime @default(now())
+  fechaIngreso            DateTime         @default(now())
   fechaCierre             DateTime?
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-
-  // Relaciones
-  tipoDocumento           TipoDocumento @relation(fields: [tipoDocumentoId], references: [id])
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  tipoDocumento           TipoDocumento    @relation(fields: [tipoDocumentoId], references: [id])
   tipoDocumentoId         String
-
-  oficinaRemitente        Oficina       @relation(fields: [oficinaRemitenteId], references: [id])
+  oficinaRemitente        Oficina          @relation(fields: [oficinaRemitenteId], references: [id])
   oficinaRemitenteId      String
-
-  usuarioAsignado         User?         @relation("TramitesAsignados", fields: [usuarioAsignadoId], references: [id])
+  usuarioAsignado         User?            @relation("TramitesAsignados", fields: [usuarioAsignadoId], references: [id])
   usuarioAsignadoId       String?
-
   movimientos             Movimiento[]
   anotaciones             Anotacion[]
-
   @@map("tramites")
 }
 
@@ -156,35 +119,27 @@ enum PrioridadTramite {
 
 
 model Movimiento {
-  id                String   @id @default(cuid())
-  tipoAccion        TipoAccion
-
-  // Campos para el documento específico del movimiento
-  numeroDocumentoCompleto String?
-  correlativo             Int?
-  anio                    Int?
+  id                      String        @id @default(cuid())
+  tipoAccion              TipoAccion
+  // --- AJUSTE: Campos para el número de documento del movimiento ---
+  numeroDocumento         String? // El 'XXX' manual y opcional
+  numeroDocumentoCompleto String? // El nombre completo generado y opcional
+  // ----------------------------------------------------------------
   fechaDocumento          DateTime?
+  notas                   String?
+  observaciones           String?
+  fechaCierre             DateTime?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  tramite                 Tramite       @relation(fields: [tramiteId], references: [id])
+  tramiteId               String
+  usuarioCreador          User          @relation(fields: [usuarioCreadorId], references: [id])
+  usuarioCreadorId        String
+  oficinaOrigen           Oficina       @relation(fields: [oficinaOrigenId], references: [id])
+  oficinaOrigenId         String
   tipoDocumento           TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
   tipoDocumentoId         String?
-
-  notas             String?
-  observaciones     String?
-  fechaCierre       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  // Relaciones
-  tramite           Tramite  @relation(fields: [tramiteId], references: [id])
-  tramiteId         String
-
-  usuarioCreador    User     @relation(fields: [usuarioCreadorId], references: [id])
-  usuarioCreadorId  String
-
-  oficinaOrigen     Oficina  @relation(fields: [oficinaOrigenId], references: [id])
-  oficinaOrigenId   String
-
-  destinos          MovimientoDestino[]
-
+  destinos                MovimientoDestino[]
   @@map("movimientos")
 }
 
@@ -197,18 +152,14 @@ enum TipoAccion {
 }
 
 model MovimientoDestino {
-  id              String   @id @default(cuid())
-  tipoDestino     TipoDestino @default(PRINCIPAL)
-  fechaRecepcion  DateTime?
-  estado          EstadoDestino @default(PENDIENTE)
-  
-  // Relaciones
-  movimiento      Movimiento @relation(fields: [movimientoId], references: [id])
-  movimientoId    String
-
-  oficinaDestino  Oficina    @relation(fields: [oficinaDestinoId], references: [id])
+  id               String        @id @default(cuid())
+  tipoDestino      TipoDestino   @default(PRINCIPAL)
+  fechaRecepcion   DateTime?
+  estado           EstadoDestino @default(PENDIENTE)
+  movimiento       Movimiento    @relation(fields: [movimientoId], references: [id])
+  movimientoId     String
+  oficinaDestino   Oficina       @relation(fields: [oficinaDestinoId], references: [id])
   oficinaDestinoId String
-
   @@map("movimiento_destinos")
 }
 
@@ -227,14 +178,10 @@ model Anotacion {
   id        String   @id @default(cuid())
   contenido String
   createdAt DateTime @default(now())
-
-  // Relaciones
   tramite   Tramite  @relation(fields: [tramiteId], references: [id])
   tramiteId String
-
   autor     User     @relation(fields: [autorId], references: [id])
   autorId   String
-
   @@map("anotaciones")
 }
 
@@ -247,6 +194,5 @@ model Feriado {
   id          String   @id @default(cuid())
   fecha       DateTime @unique @db.Date
   descripcion String
-  
   @@map("feriados")
 }

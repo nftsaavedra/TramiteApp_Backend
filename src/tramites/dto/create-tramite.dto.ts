@@ -1,4 +1,3 @@
-
 import {
   IsDateString,
   IsEnum,
@@ -11,6 +10,12 @@ import {
 import { PrioridadTramite } from '@prisma/client';
 
 export class CreateTramiteDto {
+  // --- CAMPO AÑADIDO ---
+  // Este es el número 'XXX' que el usuario ingresará manualmente.
+  @IsString()
+  @IsNotEmpty()
+  numeroDocumento: string;
+
   @IsString()
   @IsNotEmpty()
   @MinLength(5)
@@ -45,5 +50,4 @@ export class CreateTramiteDto {
   @IsUUID()
   @IsOptional()
   usuarioAsignadoId?: string;
-
 }

@@ -2,66 +2,73 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateTramiteDto } from './dto/create-tramite.dto';
 import { UpdateTramiteDto } from './dto/update-tramite.dto';
 import { PrismaService } from '@/prisma/prisma.service';
+import { Oficina } from '@prisma/client';
 
 @Injectable()
 export class TramitesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // --- MÉTODO 'create' CON LÓGICA DE NEGOCIO ---
+  // --- MÉTODO 'create' REESTRUCTURADO ---
   async create(createTramiteDto: CreateTramiteDto) {
-    const { tipoDocumentoId, oficinaRemitenteId } = createTramiteDto;
+    const {
+      tipoDocumentoId,
+      oficinaRemitenteId,
+      numeroDocumento,
+      ...tramiteData
+    } = createTramiteDto;
     const anio = new Date().getFullYear();
 
-    // 1. Obtener u crear el correlativo para este tipo de documento y oficina
-    const correlativoData = await this.prisma.documentoCorrelativo.upsert({
-      where: {
-        anio_oficinaId_tipoDocumentoId: {
-          anio,
-          oficinaId: oficinaRemitenteId,
-          tipoDocumentoId,
-        },
-      },
-      update: {
-        correlativo: {
-          increment: 1,
-        },
-      },
-      create: {
-        anio,
-        correlativo: 1,
-        oficinaId: oficinaRemitenteId,
-        tipoDocumentoId,
-      },
-    });
-
-    const nuevoCorrelativo = correlativoData.correlativo;
-
-    // 2. Obtener las siglas para construir el nombre del documento
-    // (Esta lógica se puede hacer más compleja para manejar la jerarquía completa)
-    const oficina = await this.prisma.oficina.findUnique({
-      where: { id: oficinaRemitenteId },
-    });
-    const tipoDoc = await this.prisma.tipoDocumento.findUnique({
+    // 1. Obtener los datos necesarios para construir el nombre
+    const tipoDoc = await this.prisma.tipoDocumento.findUniqueOrThrow({
       where: { id: tipoDocumentoId },
     });
 
-    // 3. Construir el número de documento completo
-    const numeroDocumentoCompleto = `${tipoDoc.nombre}-${String(nuevoCorrelativo).padStart(3, '0')}-${anio}-${oficina.siglas}`;
+    // 2. Construir la jerarquía de siglas de la oficina
+    const jerarquia = await this.obtenerJerarquiaOficina(oficinaRemitenteId);
+
+    // 3. Ensamblar el número de documento completo
+    // Formato: INFORME-N°-XXX-2025-VPIN/DGI/UED
+    const numeroDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
 
     // 4. Crear el trámite en la base de datos
     return this.prisma.tramite.create({
       data: {
-        ...createTramiteDto,
-        anio,
-        correlativo: nuevoCorrelativo,
+        ...tramiteData,
+        numeroDocumento,
         numeroDocumentoCompleto,
+        tipoDocumentoId,
+        oficinaRemitenteId,
       },
     });
   }
 
-  // --- MÉTODO 'findAll' CON PAGINACIÓN Y FILTROS (BÁSICO) ---
+  // --- FUNCIÓN AUXILIAR PARA LA JERARQUÍA ---
+  private async obtenerJerarquiaOficina(oficinaId: string): Promise<string> {
+    let oficinaActual: (Oficina & { parent?: Oficina | null }) | null =
+      await this.prisma.oficina.findUnique({
+        where: { id: oficinaId },
+        include: { parent: true },
+      });
+
+    if (!oficinaActual) return '';
+
+    const siglas: string[] = [];
+    while (oficinaActual) {
+      siglas.unshift(oficinaActual.siglas);
+      if (oficinaActual.parentId) {
+        oficinaActual = await this.prisma.oficina.findUnique({
+          where: { id: oficinaActual.parentId },
+          include: { parent: true },
+        });
+      } else {
+        oficinaActual = null;
+      }
+    }
+    return siglas.join('/');
+  }
+
+  // --- MÉTODO 'findAll' (sin cambios) ---
   async findAll() {
-    // En un futuro, aquí se pueden añadir query params para filtrar y paginar
     return this.prisma.tramite.findMany({
       orderBy: {
         fechaIngreso: 'desc',
@@ -69,8 +76,7 @@ export class TramitesService {
     });
   }
 
-  // --- MÉTODO 'findOne' CON RELACIONES ---
-  // Devuelve un trámite con su historial completo
+  // --- MÉTODO 'findOne' (sin cambios) ---
   async findOne(id: string) {
     const tramite = await this.prisma.tramite.findUnique({
       where: { id },
@@ -117,12 +123,7 @@ export class TramitesService {
     });
   }
 
-  // La eliminación de un trámite usualmente es cambiar su estado a ARCHIVADO o CERRADO
-  // Esto se manejará a través del método 'update' o con la creación de un movimiento de cierre.
-  // El método 'remove' tradicional no se implementa para evitar pérdida de datos.
   async remove(id: string) {
-    // Lógica de borrado no recomendada para trámites.
-    // Se puede implementar un borrado lógico si es estrictamente necesario.
     throw new Error(
       'La eliminación de trámites no está permitida. Se debe archivar o cerrar.',
     );
