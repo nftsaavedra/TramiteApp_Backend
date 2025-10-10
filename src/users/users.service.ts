@@ -1,11 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
-import { Role, User } from '@prisma/client';
+import { Role } from '@prisma/client';
+import type { User } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class UsersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private configService: ConfigService,
+  ) {}
 
   async create(
     data: Omit<User, 'id' | 'createdAt' | 'updatedAt'>,
@@ -25,28 +30,34 @@ export class UsersService {
     });
   }
 
-  async ensureSuperUserExists(): Promise<User> {
-    // Define las credenciales del superusuario. En un entorno real, esto vendría de variables de entorno.
-    const superUserEmail = 'supervisor@multibank.com';
-    const superUserPassword = 'PasswordSeguro123';
+  // --- CORREGIDO: Se ajustó el tipo de retorno de la promesa ---
+  async ensureSuperUserExists(): Promise<User | undefined> {
+    const adminEmail = this.configService.get<string>('ADMIN_EMAIL');
+    const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
 
-    // 1. Busca si el usuario ya existe.
-    const existingUser = await this.findByEmail(superUserEmail);
+    if (!adminEmail || !adminPassword) {
+      console.warn(
+        'Credenciales de administrador no definidas en .env, omitiendo creación.',
+      );
+      return; // Ahora esto es válido
+    }
 
-    // 2. Si ya existe, lo devuelve y no hace nada más.
+    const existingUser = await this.findByEmail(adminEmail);
+
     if (existingUser) {
       return existingUser;
     }
 
-    // 3. Si no existe, lo crea usando el método create() que ya teníamos.
-    console.log('Creando superusuario...');
+    console.log('Creando usuario ADMIN...');
     const newUser = await this.create({
-      email: superUserEmail,
-      name: 'Supervisor Principal',
-      password: superUserPassword,
-      role: Role.SUPERVISOR,
+      email: adminEmail,
+      name: 'Administrador Principal',
+      password: adminPassword,
+      role: Role.ADMIN,
+      isActive: true,
+      oficinaId: null,
     });
-    console.log('Superusuario creado exitosamente.');
+    console.log('Usuario ADMIN creado exitosamente.');
     return newUser;
   }
 }

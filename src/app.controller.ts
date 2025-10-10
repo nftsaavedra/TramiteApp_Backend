@@ -15,7 +15,7 @@ export class AppController {
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.OPERADOR) // <-- Esta ruta requiere rol de OPERADOR (pero SUPERVISOR también podrá acceder)
+  @Roles(Role.RECEPCIONISTA) // <-- CORREGIDO: Rol actualizado de OPERADOR a RECEPCIONISTA
   @Get('profile')
   getProfile(@Request() req) {
     return req.user;
