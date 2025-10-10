@@ -1,11 +1,13 @@
 import {
   IsBoolean,
+  IsEnum, // <-- AÑADIDO: Para validar contra el Enum
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
   MinLength,
 } from 'class-validator';
+import { TipoOficina } from '@prisma/client'; // <-- AÑADIDO: Importamos nuestro Enum
 
 export class CreateOficinaDto {
   @IsString()
@@ -17,15 +19,15 @@ export class CreateOficinaDto {
   @IsNotEmpty()
   siglas: string;
 
-  @IsString()
+  // --- CAMBIO: De IsString a IsEnum ---
+  @IsEnum(TipoOficina) // Ahora valida contra los valores definidos
   @IsNotEmpty()
-  tipo: string;
+  tipo: TipoOficina; // El tipo de dato ahora es el Enum
 
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
 
-  // Para especificar la oficina padre. Es opcional.
   @IsUUID()
   @IsOptional()
   parentId?: string | null;
