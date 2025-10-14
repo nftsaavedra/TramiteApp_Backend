@@ -5,6 +5,8 @@ import { UsersService } from './users/users.service'; // <-- AÑADIDO: Importamo
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.enableCors();
+
   // --- AÑADIDO: Lógica para crear el usuario ADMIN al iniciar ---
   // 1. Obtenemos una instancia del UsersService
   const usersService = app.get(UsersService);
