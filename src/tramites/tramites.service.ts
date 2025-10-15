@@ -73,6 +73,10 @@ export class TramitesService {
       orderBy: {
         fechaIngreso: 'desc',
       },
+      include: {
+        oficinaRemitente: true, // Incluye el objeto completo de la oficina
+        tipoDocumento: true,    // Incluye el objeto completo del tipo de documento
+      },
     });
   }
 
