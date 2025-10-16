@@ -1,3 +1,5 @@
+// En: src/movimientos/movimientos.controller.ts
+
 import {
   Controller,
   Get,
@@ -14,8 +16,6 @@ import { CreateMovimientoDto } from './dto/create-movimiento.dto';
 import { UpdateMovimientoDto } from './dto/update-movimiento.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth/jwt-auth.guard';
 import { GetUser } from '@/auth/decorators/get-user.decorator';
-
-// --- SOLUCIÓN: Cambiar 'import' por 'import type' ---
 import type { User } from '@prisma/client';
 
 @Controller('movimientos')
@@ -26,18 +26,18 @@ export class MovimientosController {
   @Post()
   create(
     @Body() createMovimientoDto: CreateMovimientoDto,
-    @GetUser() user: User, // Aquí es donde se usa el tipo 'User'
+    @GetUser() user: User,
   ) {
+    // La validación de que el usuario pertenece a una oficina sigue siendo una buena práctica.
     if (!user.oficinaId) {
       throw new BadRequestException(
         'El usuario no está asignado a ninguna oficina.',
       );
     }
-    return this.movimientosService.create(
-      createMovimientoDto,
-      user.id,
-      user.oficinaId,
-    );
+
+    // --- LLAMADA AL SERVICIO SIMPLIFICADA ---
+    // Ya no pasamos user.oficinaId. El servicio se encarga de todo.
+    return this.movimientosService.create(createMovimientoDto, user.id);
   }
 
   @Get()
@@ -47,7 +47,6 @@ export class MovimientosController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    // --- CORREGIDO: Se eliminó el '+' que convierte a número
     return this.movimientosService.findOne(id);
   }
 
@@ -56,13 +55,11 @@ export class MovimientosController {
     @Param('id') id: string,
     @Body() updateMovimientoDto: UpdateMovimientoDto,
   ) {
-    // --- CORREGIDO: Se eliminó el '+' que convierte a número
     return this.movimientosService.update(id, updateMovimientoDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    // --- CORREGIDO: Se eliminó el '+' que convierte a número
     return this.movimientosService.remove(id);
   }
 }
