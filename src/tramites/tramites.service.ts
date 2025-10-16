@@ -6,20 +6,23 @@ import { UpdateTramiteDto } from './dto/update-tramite.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Oficina, Prisma } from '@prisma/client'; // 1. Importar Prisma
 import { FindAllTramitesDto } from './dto/find-all-tramites.dto'; // 2. Importar el DTO
+import { PlazoService } from '@/common/plazo/plazo.service';
+
+type EstadoPlazo = 'VENCIDO' | 'POR_VENCER' | 'A_TIEMPO' | 'NO_APLICA';
 
 @Injectable()
 export class TramitesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly plazoService: PlazoService,
+  ) {}
 
-  // --- MÉTODO 'findAll' COMPLETAMENTE REFACTORIZADO ---
   async findAll(query: FindAllTramitesDto) {
     const { q, estado, prioridad, page = '1', limit = '10', sortBy } = query;
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
-    // 3. Construir cláusula 'where' dinámica
     const where: Prisma.TramiteWhereInput = {};
-
     if (q) {
       where.OR = [
         { asunto: { contains: q, mode: 'insensitive' } },
@@ -29,24 +32,20 @@ export class TramitesService {
     if (estado) where.estado = estado;
     if (prioridad) where.prioridad = prioridad;
 
-    // 4. Configurar ordenamiento
     const [sortByField, sortOrder] = sortBy
       ? sortBy.split(':')
       : ['fechaIngreso', 'desc'];
     const orderBy = { [sortByField]: sortOrder as Prisma.SortOrder };
 
-    // 5. Ejecutar consultas para obtener datos y conteo total
-    const [tramites, total] = await this.prisma.$transaction([
+    const [tramitesFromDb, total] = await this.prisma.$transaction([
       this.prisma.tramite.findMany({
         where,
         skip: (pageNumber - 1) * limitNumber,
         take: limitNumber,
         orderBy,
-        // 6. Incluir relaciones de forma optimizada
         include: {
           oficinaRemitente: { select: { nombre: true, siglas: true } },
           tipoDocumento: { select: { nombre: true } },
-          // Se incluye solo el último movimiento para obtener la ubicación actual
           movimientos: {
             orderBy: { createdAt: 'desc' },
             take: 1,
@@ -64,7 +63,17 @@ export class TramitesService {
       this.prisma.tramite.count({ where }),
     ]);
 
-    // 7. Devolver una respuesta paginada
+    const tramites = tramitesFromDb.map((tramite) => {
+      const { diasTranscurridos, estadoPlazo } = this.getPlazoInfo(tramite);
+      return {
+        ...tramite,
+        plazo: {
+          diasTranscurridos,
+          estado: estadoPlazo,
+        },
+      };
+    });
+
     return {
       data: tramites,
       meta: {
@@ -75,8 +84,6 @@ export class TramitesService {
       },
     };
   }
-
-  // --- El resto de los métodos (`create`, `findOne`, etc.) permanecen igual ---
 
   async create(createTramiteDto: CreateTramiteDto) {
     const {
@@ -146,19 +153,25 @@ export class TramitesService {
           },
         },
         anotaciones: {
-          include: {
-            autor: true,
-          },
-          orderBy: {
-            createdAt: 'desc',
-          },
+          include: { autor: true },
+          orderBy: { createdAt: 'desc' },
         },
       },
     });
+
     if (!tramite) {
       throw new NotFoundException(`Trámite con ID "${id}" no encontrado`);
     }
-    return tramite;
+
+    const { diasTranscurridos, estadoPlazo } = this.getPlazoInfo(tramite);
+
+    return {
+      ...tramite,
+      plazo: {
+        diasTranscurridos,
+        estado: estadoPlazo,
+      },
+    };
   }
 
   async update(id: string, updateTramiteDto: UpdateTramiteDto) {
@@ -173,5 +186,43 @@ export class TramitesService {
     throw new Error(
       'La eliminación de trámites no está permitida. Se debe archivar o cerrar.',
     );
+  }
+
+  private getPlazoInfo(tramite: {
+    estado: string;
+    movimientos: { createdAt: Date }[];
+    fechaIngreso: Date;
+  }): { diasTranscurridos: number | null; estadoPlazo: EstadoPlazo } {
+    if (tramite.estado !== 'ABIERTO') {
+      return { diasTranscurridos: null, estadoPlazo: 'NO_APLICA' };
+    }
+
+    // En `findAll` los movimientos vienen ordenados DESC, en `findOne` vienen ASC.
+    // Esta lógica maneja ambos casos para encontrar la fecha correcta.
+    let fechaReferencia: Date;
+    if (tramite.movimientos?.length > 0) {
+      // Si hay un solo movimiento (desde findAll), es el [0].
+      // Si hay muchos (desde findOne), el último del array es el más reciente.
+      fechaReferencia =
+        tramite.movimientos[tramite.movimientos.length - 1].createdAt;
+    } else {
+      fechaReferencia = tramite.fechaIngreso;
+    }
+
+    const diasTranscurridos = this.plazoService.calcularDiasHabiles(
+      fechaReferencia,
+      new Date(),
+    );
+
+    let estadoPlazo: EstadoPlazo;
+    if (diasTranscurridos >= 7) {
+      estadoPlazo = 'VENCIDO';
+    } else if (diasTranscurridos >= 5) {
+      estadoPlazo = 'POR_VENCER';
+    } else {
+      estadoPlazo = 'A_TIEMPO';
+    }
+
+    return { diasTranscurridos, estadoPlazo };
   }
 }

@@ -10,11 +10,13 @@ import { TiposDocumentoModule } from './tipos-documento/tipos-documento.module';
 import { TramitesModule } from './tramites/tramites.module';
 import { MovimientosModule } from './movimientos/movimientos.module';
 import { AnotacionesModule } from './anotaciones/anotaciones.module';
+import { FeriadosModule } from './feriados/feriados.module';
+import { PlazoModule } from './common/plazo/plazo.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    PrismaModule, UsersModule, AuthModule, OficinasModule, TiposDocumentoModule, TramitesModule, MovimientosModule, AnotacionesModule],
+    PrismaModule, UsersModule, AuthModule, OficinasModule, TiposDocumentoModule, TramitesModule, MovimientosModule, AnotacionesModule, FeriadosModule, PlazoModule],
   controllers: [AppController],
   providers: [AppService],
 })
