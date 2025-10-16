@@ -1,14 +1,83 @@
+// En: src/tramites/tramites.service.ts
+
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateTramiteDto } from './dto/create-tramite.dto';
 import { UpdateTramiteDto } from './dto/update-tramite.dto';
 import { PrismaService } from '@/prisma/prisma.service';
-import { Oficina } from '@prisma/client';
+import { Oficina, Prisma } from '@prisma/client'; // 1. Importar Prisma
+import { FindAllTramitesDto } from './dto/find-all-tramites.dto'; // 2. Importar el DTO
 
 @Injectable()
 export class TramitesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // --- MÉTODO 'create' REESTRUCTURADO ---
+  // --- MÉTODO 'findAll' COMPLETAMENTE REFACTORIZADO ---
+  async findAll(query: FindAllTramitesDto) {
+    const { q, estado, prioridad, page = '1', limit = '10', sortBy } = query;
+    const pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
+
+    // 3. Construir cláusula 'where' dinámica
+    const where: Prisma.TramiteWhereInput = {};
+
+    if (q) {
+      where.OR = [
+        { asunto: { contains: q, mode: 'insensitive' } },
+        { numeroDocumentoCompleto: { contains: q, mode: 'insensitive' } },
+      ];
+    }
+    if (estado) where.estado = estado;
+    if (prioridad) where.prioridad = prioridad;
+
+    // 4. Configurar ordenamiento
+    const [sortByField, sortOrder] = sortBy
+      ? sortBy.split(':')
+      : ['fechaIngreso', 'desc'];
+    const orderBy = { [sortByField]: sortOrder as Prisma.SortOrder };
+
+    // 5. Ejecutar consultas para obtener datos y conteo total
+    const [tramites, total] = await this.prisma.$transaction([
+      this.prisma.tramite.findMany({
+        where,
+        skip: (pageNumber - 1) * limitNumber,
+        take: limitNumber,
+        orderBy,
+        // 6. Incluir relaciones de forma optimizada
+        include: {
+          oficinaRemitente: { select: { nombre: true, siglas: true } },
+          tipoDocumento: { select: { nombre: true } },
+          // Se incluye solo el último movimiento para obtener la ubicación actual
+          movimientos: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            include: {
+              destinos: {
+                take: 1,
+                include: {
+                  oficinaDestino: { select: { nombre: true, siglas: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.tramite.count({ where }),
+    ]);
+
+    // 7. Devolver una respuesta paginada
+    return {
+      data: tramites,
+      meta: {
+        total,
+        page: pageNumber,
+        limit: limitNumber,
+        lastPage: Math.ceil(total / limitNumber),
+      },
+    };
+  }
+
+  // --- El resto de los métodos (`create`, `findOne`, etc.) permanecen igual ---
+
   async create(createTramiteDto: CreateTramiteDto) {
     const {
       tipoDocumentoId,
@@ -17,20 +86,11 @@ export class TramitesService {
       ...tramiteData
     } = createTramiteDto;
     const anio = new Date().getFullYear();
-
-    // 1. Obtener los datos necesarios para construir el nombre
     const tipoDoc = await this.prisma.tipoDocumento.findUniqueOrThrow({
       where: { id: tipoDocumentoId },
     });
-
-    // 2. Construir la jerarquía de siglas de la oficina
     const jerarquia = await this.obtenerJerarquiaOficina(oficinaRemitenteId);
-
-    // 3. Ensamblar el número de documento completo
-    // Formato: INFORME-N°-XXX-2025-VPIN/DGI/UED
     const numeroDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
-
-    // 4. Crear el trámite en la base de datos
     return this.prisma.tramite.create({
       data: {
         ...tramiteData,
@@ -42,16 +102,13 @@ export class TramitesService {
     });
   }
 
-  // --- FUNCIÓN AUXILIAR PARA LA JERARQUÍA ---
   private async obtenerJerarquiaOficina(oficinaId: string): Promise<string> {
     let oficinaActual: (Oficina & { parent?: Oficina | null }) | null =
       await this.prisma.oficina.findUnique({
         where: { id: oficinaId },
         include: { parent: true },
       });
-
     if (!oficinaActual) return '';
-
     const siglas: string[] = [];
     while (oficinaActual) {
       siglas.unshift(oficinaActual.siglas);
@@ -67,20 +124,6 @@ export class TramitesService {
     return siglas.join('/');
   }
 
-  // --- MÉTODO 'findAll' (sin cambios) ---
-  async findAll() {
-    return this.prisma.tramite.findMany({
-      orderBy: {
-        fechaIngreso: 'desc',
-      },
-      include: {
-        oficinaRemitente: true, // Incluye el objeto completo de la oficina
-        tipoDocumento: true,    // Incluye el objeto completo del tipo de documento
-      },
-    });
-  }
-
-  // --- MÉTODO 'findOne' (sin cambios) ---
   async findOne(id: string) {
     const tramite = await this.prisma.tramite.findUnique({
       where: { id },
@@ -112,7 +155,6 @@ export class TramitesService {
         },
       },
     });
-
     if (!tramite) {
       throw new NotFoundException(`Trámite con ID "${id}" no encontrado`);
     }
