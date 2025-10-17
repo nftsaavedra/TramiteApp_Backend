@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateOficinaDto } from './dto/create-oficina.dto';
 import { UpdateOficinaDto } from './dto/update-oficina.dto';
-import { PrismaService } from '@/prisma/prisma.service'; 
+import { PrismaService } from '@/prisma/prisma.service';
 import { Oficina } from '@prisma/client';
 
 @Injectable()
@@ -14,16 +14,30 @@ export class OficinasService {
     });
   }
 
-  // --- MÉTODO 'findAll' ACTUALIZADO Y FLEXIBLE ---
+  // --- MÉTODO 'findAll' REFINADO PARA INCLUIR JERARQUÍA ---
   async findAll(wantTree = false) {
-    const todasLasOficinas = await this.prisma.oficina.findMany({
+    const findOptions = {
       where: { isActive: true },
-    });
+      // 1. Incluimos la relación con la oficina padre
+      include: {
+        parent: {
+          select: {
+            id: true,
+            nombre: true,
+            siglas: true,
+          },
+        },
+      },
+      orderBy: {
+        nombre: 'asc' as const,
+      },
+    };
+
+    const todasLasOficinas = await this.prisma.oficina.findMany(findOptions);
 
     if (wantTree) {
-      // Si se solicita el árbol, lo construimos
       const construirArbol = (
-        list: Oficina[],
+        list: (Oficina & { parent: { siglas: string } | null })[],
         parentId: string | null = null,
       ): any[] => {
         return list
@@ -36,7 +50,7 @@ export class OficinasService {
       return construirArbol(todasLasOficinas);
     }
 
-    // Por defecto, devolvemos la lista plana
+    // 2. La lista plana ahora contiene la información del padre en cada oficina
     return todasLasOficinas;
   }
 
