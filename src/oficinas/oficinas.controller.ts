@@ -11,6 +11,7 @@ import {
 import { OficinasService } from './oficinas.service';
 import { CreateOficinaDto } from './dto/create-oficina.dto';
 import { UpdateOficinaDto } from './dto/update-oficina.dto';
+import { FindAllOficinasDto } from './dto/find-all-oficinas';
 
 @Controller('oficinas')
 export class OficinasController {
@@ -24,10 +25,9 @@ export class OficinasController {
   // --- MÉTODO ACTUALIZADO ---
   // Acepta el query param 'tree'
   @Get()
-  findAll(@Query('tree') tree?: string) {
-    const wantTree = tree === 'true';
-    return this.oficinasService.findAll(wantTree);
-  }
+findAll(@Query() query: FindAllOficinasDto) {
+  return this.oficinasService.findAll(query);
+}
 
   // --- CORREGIDO ---
   // Se eliminó el '+' de '+id'

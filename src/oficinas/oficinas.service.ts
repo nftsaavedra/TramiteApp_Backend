@@ -2,7 +2,8 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateOficinaDto } from './dto/create-oficina.dto';
 import { UpdateOficinaDto } from './dto/update-oficina.dto';
 import { PrismaService } from '@/prisma/prisma.service';
-import { Oficina } from '@prisma/client';
+import { Oficina, Prisma } from '@prisma/client';
+import { FindAllOficinasDto } from './dto/find-all-oficinas';
 
 @Injectable()
 export class OficinasService {
@@ -14,11 +15,28 @@ export class OficinasService {
     });
   }
 
-  // --- MÉTODO 'findAll' REFINADO PARA INCLUIR JERARQUÍA ---
-  async findAll(wantTree = false) {
+  // --- MÉTODO 'findAll' REFACTORIZADO PARA FILTROS DINÁMICOS ---
+  async findAll(query: FindAllOficinasDto) {
+    const { nombre, siglas, tipo, tree } = query;
+    const wantTree = tree === 'true';
+
+    // Construimos la cláusula 'where' dinámicamente
+    const where: Prisma.OficinaWhereInput = {
+      isActive: true,
+    };
+
+    if (nombre) {
+      where.nombre = { contains: nombre, mode: 'insensitive' };
+    }
+    if (siglas) {
+      where.siglas = { contains: siglas, mode: 'insensitive' };
+    }
+    if (tipo) {
+      where.tipo = tipo;
+    }
+
     const findOptions = {
-      where: { isActive: true },
-      // 1. Incluimos la relación con la oficina padre
+      where,
       include: {
         parent: {
           select: {
@@ -50,7 +68,7 @@ export class OficinasService {
       return construirArbol(todasLasOficinas);
     }
 
-    // 2. La lista plana ahora contiene la información del padre en cada oficina
+    // La lista plana ahora está filtrada y contiene la info del padre
     return todasLasOficinas;
   }
 
