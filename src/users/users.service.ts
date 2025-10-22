@@ -46,8 +46,17 @@ export class UsersService {
   async findAll(): Promise<Omit<User, 'password'>[]> {
     const users = await this.prisma.user.findMany({
       where: { isActive: true },
+      include: {
+        // Se incluye la relación con la oficina
+        oficina: {
+          select: {
+            id: true,
+            nombre: true,
+            siglas: true,
+          },
+        },
+      },
     });
-    // Excluimos la contraseña de cada usuario en la respuesta
     return users.map(({ password, ...user }) => user);
   }
 
@@ -55,6 +64,16 @@ export class UsersService {
   async findOne(id: string): Promise<Omit<User, 'password'>> {
     const user = await this.prisma.user.findUnique({
       where: { id },
+      include: {
+        // Se incluye la relación con la oficina
+        oficina: {
+          select: {
+            id: true,
+            nombre: true,
+            siglas: true,
+          },
+        },
+      },
     });
 
     if (!user) {
