@@ -9,8 +9,7 @@ import {
   Param,
   Delete,
   UseGuards,
-  // 1. BadRequestException ya no es necesario aquí
-  ParseUUIDPipe, // 2. Importar ParseUUIDPipe
+  // 1. Eliminar ParseUUIDPipe de las importaciones
 } from '@nestjs/common';
 import { MovimientosService } from './movimientos.service';
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
@@ -38,23 +37,23 @@ export class MovimientosController {
   }
 
   @Get(':id')
-  // 5. Añadir Pipe de validación
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
+  // 2. Eliminar el Pipe
+  findOne(@Param('id') id: string) {
     return this.movimientosService.findOne(id);
   }
 
   @Patch(':id')
-  // 5. Añadir Pipe de validación
+  // 2. Eliminar el Pipe
   update(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @Body() updateMovimientoDto: UpdateMovimientoDto,
   ) {
     return this.movimientosService.update(id, updateMovimientoDto);
   }
 
   @Delete(':id')
-  // 5. Añadir Pipe de validación
-  remove(@Param('id', ParseUUIDPipe) id: string) {
+  // 2. Eliminar el Pipe
+  remove(@Param('id') id: string) {
     return this.movimientosService.remove(id);
   }
 }
