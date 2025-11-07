@@ -9,7 +9,8 @@ import {
   Param,
   Delete,
   UseGuards,
-  BadRequestException,
+  // 1. BadRequestException ya no es necesario aquí
+  ParseUUIDPipe, // 2. Importar ParseUUIDPipe
 } from '@nestjs/common';
 import { MovimientosService } from './movimientos.service';
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
@@ -28,16 +29,7 @@ export class MovimientosController {
     @Body() createMovimientoDto: CreateMovimientoDto,
     @GetUser() user: User,
   ) {
-    // La validación de que el usuario pertenece a una oficina sigue siendo una buena práctica.
-    if (!user.oficinaId) {
-      throw new BadRequestException(
-        'El usuario no está asignado a ninguna oficina.',
-      );
-    }
-
-    // --- LLAMADA AL SERVICIO SIMPLIFICADA ---
-    // Ya no pasamos user.oficinaId. El servicio se encarga de todo.
-    return this.movimientosService.create(createMovimientoDto, user.id);
+    return this.movimientosService.create(createMovimientoDto, user);
   }
 
   @Get()
@@ -46,20 +38,23 @@ export class MovimientosController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  // 5. Añadir Pipe de validación
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.movimientosService.findOne(id);
   }
 
   @Patch(':id')
+  // 5. Añadir Pipe de validación
   update(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateMovimientoDto: UpdateMovimientoDto,
   ) {
     return this.movimientosService.update(id, updateMovimientoDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  // 5. Añadir Pipe de validación
+  remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.movimientosService.remove(id);
   }
 }
