@@ -68,6 +68,7 @@ model Oficina {
   tramitesOriginados Tramite[]
   movimientosOrigen  Movimiento[]
   movimientosDestino MovimientoDestino[]
+  esInquilino Boolean @default(false)
   @@map("oficinas")
 }
 
