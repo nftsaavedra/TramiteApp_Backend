@@ -1,14 +1,23 @@
-import { Controller, Post, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Get, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
+// Asegúrate de que la ruta de importación sea correcta según tu estructura
+import { JwtAuthGuard } from '@/common/guards/jwt-auth/jwt-auth.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  @UseGuards(AuthGuard('local')) // 1. Usamos el guardián de la estrategia local
+  @UseGuards(AuthGuard('local'))
   @Post('login')
   async login(@Request() req) {
-    return this.authService.login(req.user); // 2. Si la estrategia es exitosa, el user se adjunta a req
+    return this.authService.login(req.user);
+  }
+
+  // --- NUEVO ENDPOINT DE REHIDRATACIÓN ---
+  @UseGuards(JwtAuthGuard)
+  @Get('profile')
+  getProfile(@Request() req) {
+    return req.user;
   }
 }
