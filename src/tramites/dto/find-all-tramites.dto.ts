@@ -1,30 +1,59 @@
-// En: src/tramites/dto/find-all-tramites.dto.ts
-
-import { IsString, IsOptional, IsEnum, IsNumberString } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsArray,
+  IsDateString,
+} from 'class-validator';
+import { Transform } from 'class-transformer';
 import { EstadoTramite, PrioridadTramite } from '@prisma/client';
 
 export class FindAllTramitesDto {
+  @IsOptional()
   @IsString()
-  @IsOptional()
-  q?: string; // Búsqueda global por asunto o n° de documento
+  q?: string;
 
-  @IsEnum(EstadoTramite)
-  @IsOptional()
-  estado?: EstadoTramite; // Filtro por estado
+  // --- FILTROS MÚLTIPLES ---
 
-  @IsEnum(PrioridadTramite)
   @IsOptional()
-  prioridad?: PrioridadTramite; // Filtro por prioridad
+  // Transforma "ABIERTO,CERRADO" -> ['ABIERTO', 'CERRADO']
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
+  @IsEnum(EstadoTramite, { each: true })
+  estado?: EstadoTramite[];
 
-  @IsNumberString()
   @IsOptional()
-  page?: string; // Para paginación
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
+  @IsEnum(PrioridadTramite, { each: true })
+  prioridad?: PrioridadTramite[];
 
-  @IsNumberString()
   @IsOptional()
-  limit?: string; // Límite de resultados por página
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
+  @IsArray()
+  @IsString({ each: true })
+  oficinaId?: string[]; // Filtra por IDs de oficina
 
-  @IsString()
   @IsOptional()
-  sortBy?: string; // Campo y dirección para ordenar (ej: "fechaIngreso:desc")
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
+  @IsArray()
+  @IsString({ each: true })
+  tipoDocumentoId?: string[]; // Filtra por IDs de tipo documento
+
+  // --- PAGINACIÓN Y ORDEN ---
+
+  @IsOptional()
+  page?: string;
+
+  @IsOptional()
+  limit?: string;
+
+  @IsOptional()
+  sortBy?: string;
 }

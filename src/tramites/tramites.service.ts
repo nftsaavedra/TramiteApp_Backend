@@ -26,27 +26,70 @@ export class TramitesService {
 
   // --- El método findAll se mantiene 100% igual al que proveyó ---
   async findAll(query: FindAllTramitesDto) {
-    // ... (Lógica de findAll idéntica a la provista) ...
-    // [Contenido de findAll omitido por brevedad]
-    const { q, estado, prioridad, page = '1', limit = '10', sortBy } = query;
+    // Usamos el DTO actualizado
+    const {
+      q,
+      estado,
+      prioridad,
+      oficinaId,
+      tipoDocumentoId,
+      page = '1',
+      limit = '10',
+      sortBy,
+    } = query;
+
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
     const where: Prisma.TramiteWhereInput = {};
+
+    // 1. Búsqueda de Texto (Asunto o Número)
     if (q) {
       where.OR = [
         { asunto: { contains: q, mode: 'insensitive' } },
         { numeroDocumentoCompleto: { contains: q, mode: 'insensitive' } },
       ];
     }
-    if (estado) where.estado = estado;
-    if (prioridad) where.prioridad = prioridad;
 
-    const [sortByField, sortOrder] = sortBy
-      ? sortBy.split(':')
-      : ['fechaIngreso', 'desc'];
-    const orderBy = { [sortByField]: sortOrder as Prisma.SortOrder };
+    // 2. Filtros Múltiples (Arrays)
+    // Prisma usa la sintaxis { in: array } para filtrar múltiples valores
+    if (estado && estado.length > 0) {
+      where.estado = { in: estado };
+    }
 
+    if (prioridad && prioridad.length > 0) {
+      where.prioridad = { in: prioridad };
+    }
+
+    if (oficinaId && oficinaId.length > 0) {
+      // Filtramos por la oficina remitente original
+      where.oficinaRemitenteId = { in: oficinaId };
+    }
+
+    if (tipoDocumentoId && tipoDocumentoId.length > 0) {
+      where.tipoDocumentoId = { in: tipoDocumentoId };
+    }
+
+    // 3. Ordenamiento Dinámico
+    let orderBy: Prisma.TramiteOrderByWithRelationInput = {
+      fechaIngreso: 'desc',
+    };
+    if (sortBy) {
+      const [field, direction] = sortBy.split(':');
+      // Mapeo de campos permitidos para evitar errores de SQL
+      const validFields = [
+        'fechaIngreso',
+        'fechaDocumento',
+        'prioridad',
+        'estado',
+        'numeroDocumento',
+      ];
+      if (validFields.includes(field)) {
+        orderBy = { [field]: direction as Prisma.SortOrder };
+      }
+    }
+
+    // 4. Ejecución de la Consulta
     const [tramitesFromDb, total] = await this.prisma.$transaction([
       this.prisma.tramite.findMany({
         where,
@@ -56,6 +99,7 @@ export class TramitesService {
         include: {
           oficinaRemitente: { select: { nombre: true, siglas: true } },
           tipoDocumento: { select: { nombre: true } },
+          // Incluimos solo lo necesario de movimientos para calcular plazos
           movimientos: {
             orderBy: { createdAt: 'desc' },
             take: 1,
@@ -73,6 +117,7 @@ export class TramitesService {
       this.prisma.tramite.count({ where }),
     ]);
 
+    // 5. Cálculo de Plazos (Lógica existente preservada)
     const tramites = tramitesFromDb.map((tramite) => {
       const { diasTranscurridos, estadoPlazo } = this.getPlazoInfo(tramite);
       return {
