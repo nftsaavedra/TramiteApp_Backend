@@ -14,6 +14,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import { Oficina, Prisma, TipoAccion, type User } from '@prisma/client'; // 1. Importar Prisma, TipoAccion y 'type User'
 import { FindAllTramitesDto } from './dto/find-all-tramites.dto'; // 2. Importar el DTO
 import { PlazoService } from '@/common/plazo/plazo.service';
+import { PrismaWhereBuilder } from '@/common/utils/prisma-where.builder';
 
 type EstadoPlazo = 'VENCIDO' | 'POR_VENCER' | 'A_TIEMPO' | 'NO_APLICA';
 
@@ -24,15 +25,18 @@ export class TramitesService {
     private readonly plazoService: PlazoService,
   ) {}
 
-  // --- El método findAll se mantiene 100% igual al que proveyó ---
   async findAll(query: FindAllTramitesDto) {
-    // Usamos el DTO actualizado
     const {
       q,
       estado,
       prioridad,
       oficinaId,
       tipoDocumentoId,
+      // Nuevos campos de fecha
+      fechaDocumentoDesde,
+      fechaDocumentoHasta,
+      creadoDesde,
+      creadoHasta,
       page = '1',
       limit = '10',
       sortBy,
@@ -41,65 +45,62 @@ export class TramitesService {
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
-    const where: Prisma.TramiteWhereInput = {};
+    // --- CONSTRUCCIÓN DE LA CONSULTA (Refactorizado) ---
+    const where = new PrismaWhereBuilder()
+      // 1. Búsqueda Inteligente Multicampo
+      // Busca 'q' en Asunto, NumeroDoc, y dentro de las relaciones Oficina y TipoDoc
+      .addSmartSearch(
+        q,
+        ['asunto', 'numeroDocumentoCompleto', 'numeroDocumento'], // Campos directos
+        {
+          oficinaRemitente: ['nombre', 'siglas'], // Relación 1
+          tipoDocumento: ['nombre'], // Relación 2
+        },
+      )
+      // 2. Filtros Exactos (Arrays)
+      .addInFilter('estado', estado)
+      .addInFilter('prioridad', prioridad)
+      .addInFilter('oficinaRemitenteId', oficinaId)
+      .addInFilter('tipoDocumentoId', tipoDocumentoId)
 
-    // 1. Búsqueda de Texto (Asunto o Número)
-    if (q) {
-      where.OR = [
-        { asunto: { contains: q, mode: 'insensitive' } },
-        { numeroDocumentoCompleto: { contains: q, mode: 'insensitive' } },
-      ];
-    }
+      // 3. Filtros de Fecha (Negocio y Auditoría)
+      // Permite buscar documentos "del 15 de Noviembre" aunque se hayan cargado hoy
+      .addDateRange('fechaDocumento', fechaDocumentoDesde, fechaDocumentoHasta)
+      .addDateRange('createdAt', creadoDesde, creadoHasta) // 'createdAt' es el nombre en Prisma para fechaIngreso o creación
 
-    // 2. Filtros Múltiples (Arrays)
-    // Prisma usa la sintaxis { in: array } para filtrar múltiples valores
-    if (estado && estado.length > 0) {
-      where.estado = { in: estado };
-    }
+      .build();
 
-    if (prioridad && prioridad.length > 0) {
-      where.prioridad = { in: prioridad };
-    }
-
-    if (oficinaId && oficinaId.length > 0) {
-      // Filtramos por la oficina remitente original
-      where.oficinaRemitenteId = { in: oficinaId };
-    }
-
-    if (tipoDocumentoId && tipoDocumentoId.length > 0) {
-      where.tipoDocumentoId = { in: tipoDocumentoId };
-    }
-
-    // 3. Ordenamiento Dinámico
+    // --- ORDENAMIENTO (Sin cambios mayores, solo validación) ---
     let orderBy: Prisma.TramiteOrderByWithRelationInput = {
       fechaIngreso: 'desc',
     };
+
     if (sortBy) {
       const [field, direction] = sortBy.split(':');
-      // Mapeo de campos permitidos para evitar errores de SQL
-      const validFields = [
-        'fechaIngreso',
-        'fechaDocumento',
-        'prioridad',
-        'estado',
-        'numeroDocumento',
-      ];
-      if (validFields.includes(field)) {
-        orderBy = { [field]: direction as Prisma.SortOrder };
+      // Mapeo seguro para evitar inyección o errores
+      const validSortFields: Record<string, string> = {
+        fechaIngreso: 'fechaIngreso',
+        fechaDocumento: 'fechaDocumento',
+        prioridad: 'prioridad',
+        estado: 'estado',
+        numeroDocumento: 'numeroDocumento',
+      };
+
+      if (validSortFields[field]) {
+        orderBy = { [validSortFields[field]]: direction as Prisma.SortOrder };
       }
     }
 
-    // 4. Ejecución de la Consulta
+    // --- EJECUCIÓN (Prisma Transaction igual que antes) ---
     const [tramitesFromDb, total] = await this.prisma.$transaction([
       this.prisma.tramite.findMany({
-        where,
+        where, // Inyectamos el objeto where generado por el Builder
         skip: (pageNumber - 1) * limitNumber,
         take: limitNumber,
         orderBy,
         include: {
           oficinaRemitente: { select: { nombre: true, siglas: true } },
           tipoDocumento: { select: { nombre: true } },
-          // Incluimos solo lo necesario de movimientos para calcular plazos
           movimientos: {
             orderBy: { createdAt: 'desc' },
             take: 1,
@@ -117,15 +118,12 @@ export class TramitesService {
       this.prisma.tramite.count({ where }),
     ]);
 
-    // 5. Cálculo de Plazos (Lógica existente preservada)
+    // ... (Mismo código de cálculo de plazos) ...
     const tramites = tramitesFromDb.map((tramite) => {
       const { diasTranscurridos, estadoPlazo } = this.getPlazoInfo(tramite);
       return {
         ...tramite,
-        plazo: {
-          diasTranscurridos,
-          estado: estadoPlazo,
-        },
+        plazo: { diasTranscurridos, estado: estadoPlazo },
       };
     });
 
@@ -139,7 +137,6 @@ export class TramitesService {
       },
     };
   }
-
   // --- INICIO DE LA MODIFICACIÓN: MÉTODO CREATE ---
   async create(createTramiteDto: CreateTramiteDto, user: User) {
     const {

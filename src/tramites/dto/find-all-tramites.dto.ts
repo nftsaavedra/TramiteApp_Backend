@@ -1,9 +1,11 @@
+// src/tramites/dto/find-all-tramites.dto.ts
+
 import {
   IsEnum,
   IsOptional,
   IsString,
   IsArray,
-  IsDateString,
+  IsISO8601,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { EstadoTramite, PrioridadTramite } from '@prisma/client';
@@ -14,9 +16,7 @@ export class FindAllTramitesDto {
   q?: string;
 
   // --- FILTROS MÚLTIPLES ---
-
   @IsOptional()
-  // Transforma "ABIERTO,CERRADO" -> ['ABIERTO', 'CERRADO']
   @Transform(({ value }) =>
     typeof value === 'string' ? value.split(',') : value,
   )
@@ -36,7 +36,7 @@ export class FindAllTramitesDto {
   )
   @IsArray()
   @IsString({ each: true })
-  oficinaId?: string[]; // Filtra por IDs de oficina
+  oficinaId?: string[];
 
   @IsOptional()
   @Transform(({ value }) =>
@@ -44,10 +44,27 @@ export class FindAllTramitesDto {
   )
   @IsArray()
   @IsString({ each: true })
-  tipoDocumentoId?: string[]; // Filtra por IDs de tipo documento
+  tipoDocumentoId?: string[];
+
+  // 1. Fecha del Documento (Lo que ve el usuario en el papel) - PRIORIDAD
+  @IsOptional()
+  @IsISO8601()
+  fechaDocumentoDesde?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  fechaDocumentoHasta?: string;
+
+  // 2. Fecha de Registro (Cuándo se cargó en el sistema) - AUDITORÍA
+  @IsOptional()
+  @IsISO8601()
+  creadoDesde?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  creadoHasta?: string;
 
   // --- PAGINACIÓN Y ORDEN ---
-
   @IsOptional()
   page?: string;
 
