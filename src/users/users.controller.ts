@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -15,6 +16,7 @@ import { JwtAuthGuard } from '@/common/guards/jwt-auth/jwt-auth.guard';
 import { RolesGuard } from '@/common/guards/roles/roles.guard';
 import { Roles } from '@/common/decorators/roles/roles.decorator';
 import { Role } from '@prisma/client';
+import { FindAllUsersDto } from './dto/find-all-users.dto';
 
 @Controller('users')
 @UseGuards(JwtAuthGuard, RolesGuard) // Protegemos todo el controlador
@@ -28,8 +30,9 @@ export class UsersController {
   }
 
   @Get()
-  findAll() {
-    return this.usersService.findAll();
+  @Roles(Role.ADMIN) // Seguridad: Solo admins ven listado completo
+  findAll(@Query() query: FindAllUsersDto) {
+    return this.usersService.findAll(query);
   }
 
   @Get(':id')
