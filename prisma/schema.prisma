@@ -97,7 +97,7 @@ model Tramite {
   asunto                  String
   notas                   String?
   observaciones           String?
-  estado                  EstadoTramite    @default(ABIERTO)
+  estado                  EstadoTramite    @default(EN_PROCESO)
   prioridad               PrioridadTramite @default(NORMAL)
   fechaDocumento          DateTime
   fechaIngreso            DateTime         @default(now())
@@ -116,9 +116,9 @@ model Tramite {
 }
 
 enum EstadoTramite {
-  ABIERTO
-  CERRADO
-  ARCHIVADO
+  EN_PROCESO    
+  FINALIZADO    
+  ARCHIVADO     
 }
 
 enum PrioridadTramite {
