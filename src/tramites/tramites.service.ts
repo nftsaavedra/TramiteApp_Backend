@@ -1,20 +1,21 @@
-// En: src/tramites/tramites.service.ts
-
 import {
   Injectable,
   NotFoundException,
-  // --- IMPORTACIONES AÑADIDAS ---
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
 import { CreateTramiteDto } from './dto/create-tramite.dto';
 import { UpdateTramiteDto } from './dto/update-tramite.dto';
 import { PrismaService } from '@/prisma/prisma.service';
-// --- IMPORTACIONES MODIFICADAS ---
-import { Oficina, Prisma, TipoAccion, type User } from '@prisma/client'; // 1. Importar Prisma, TipoAccion y 'type User'
-import { FindAllTramitesDto } from './dto/find-all-tramites.dto'; // 2. Importar el DTO
+import {
+  Oficina,
+  Prisma,
+  TipoAccion,
+  type User,
+  EstadoTramite,
+} from '@prisma/client';
+import { FindAllTramitesDto } from './dto/find-all-tramites.dto';
 import { PlazoService } from '@/common/plazo/plazo.service';
-import { PrismaWhereBuilder } from '@/common/utils/prisma-where.builder';
 
 type EstadoPlazo = 'VENCIDO' | 'POR_VENCER' | 'A_TIEMPO' | 'NO_APLICA';
 
@@ -32,11 +33,6 @@ export class TramitesService {
       prioridad,
       oficinaId,
       tipoDocumentoId,
-      // Nuevos campos de fecha
-      fechaDocumentoDesde,
-      fechaDocumentoHasta,
-      creadoDesde,
-      creadoHasta,
       page = '1',
       limit = '10',
       sortBy,
@@ -45,56 +41,78 @@ export class TramitesService {
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
-    // --- CONSTRUCCIÓN DE LA CONSULTA (Refactorizado) ---
-    const where = new PrismaWhereBuilder()
-      // 1. Búsqueda Inteligente Multicampo
-      // Busca 'q' en Asunto, NumeroDoc, y dentro de las relaciones Oficina y TipoDoc
-      .addSmartSearch(
-        q,
-        ['asunto', 'numeroDocumentoCompleto', 'numeroDocumento'], // Campos directos
-        {
-          oficinaRemitente: ['nombre', 'siglas'], // Relación 1
-          tipoDocumento: ['nombre'], // Relación 2
-        },
-      )
-      // 2. Filtros Exactos (Arrays)
-      .addInFilter('estado', estado)
-      .addInFilter('prioridad', prioridad)
-      .addInFilter('oficinaRemitenteId', oficinaId)
-      .addInFilter('tipoDocumentoId', tipoDocumentoId)
+    const where: Prisma.TramiteWhereInput = {};
 
-      // 3. Filtros de Fecha (Negocio y Auditoría)
-      // Permite buscar documentos "del 15 de Noviembre" aunque se hayan cargado hoy
-      .addDateRange('fechaDocumento', fechaDocumentoDesde, fechaDocumentoHasta)
-      .addDateRange('createdAt', creadoDesde, creadoHasta) // 'createdAt' es el nombre en Prisma para fechaIngreso o creación
-
-      .build();
-
-    // --- ORDENAMIENTO (Sin cambios mayores, solo validación) ---
-    let orderBy: Prisma.TramiteOrderByWithRelationInput = {
-      fechaIngreso: 'desc',
-    };
-
-    if (sortBy) {
-      const [field, direction] = sortBy.split(':');
-      // Mapeo seguro para evitar inyección o errores
-      const validSortFields: Record<string, string> = {
-        fechaIngreso: 'fechaIngreso',
-        fechaDocumento: 'fechaDocumento',
-        prioridad: 'prioridad',
-        estado: 'estado',
-        numeroDocumento: 'numeroDocumento',
-      };
-
-      if (validSortFields[field]) {
-        orderBy = { [validSortFields[field]]: direction as Prisma.SortOrder };
-      }
+    // 1. Búsqueda de Texto
+    if (q) {
+      where.OR = [
+        { asunto: { contains: q, mode: 'insensitive' } },
+        { numeroDocumentoCompleto: { contains: q, mode: 'insensitive' } },
+      ];
     }
 
-    // --- EJECUCIÓN (Prisma Transaction igual que antes) ---
+    // 2. Filtros
+    if (estado && estado.length > 0) {
+      where.estado = { in: estado };
+    }
+    if (prioridad && prioridad.length > 0) {
+      where.prioridad = { in: prioridad };
+    }
+    if (oficinaId && oficinaId.length > 0) {
+      where.oficinaRemitenteId = { in: oficinaId };
+    }
+    if (tipoDocumentoId && tipoDocumentoId.length > 0) {
+      where.tipoDocumentoId = { in: tipoDocumentoId };
+    }
+
+    // 3. ORDENAMIENTO (Lógica de Negocio Mejorada - Triaje)
+    let orderBy:
+      | Prisma.TramiteOrderByWithRelationInput
+      | Prisma.TramiteOrderByWithRelationInput[];
+
+    if (sortBy) {
+      // Si el usuario fuerza un orden (click en columna), lo respetamos
+      const [field, direction] = sortBy.split(':');
+      const validFields = [
+        'fechaIngreso',
+        'fechaDocumento',
+        'prioridad',
+        'estado',
+        'numeroDocumento',
+        'numeroDocumentoCompleto',
+        'asunto',
+      ];
+
+      if (validFields.includes(field)) {
+        orderBy = { [field]: direction as Prisma.SortOrder };
+      } else {
+        orderBy = { fechaIngreso: 'desc' };
+      }
+    } else {
+      // --- ORDENAMIENTO POR DEFECTO (EL CEREBRO DEL SISTEMA) ---
+      // Regla 1: Segregación de Estado.
+      // Usamos 'fechaCierre' con 'nulls: first'.
+      // Esto pone TODOS los trámites activos (fechaCierre: null) al principio de la lista.
+      // Los finalizados/archivados se van al fondo automáticamente.
+
+      // Regla 2: Prioridad.
+      // Dentro de los activos, lo URGENTE va primero.
+      // (Postgres respeta el orden del Enum: BAJA < NORMAL < ALTA < URGENTE)
+
+      // Regla 3: Antigüedad.
+      // Si tienen misma prioridad, el más antiguo va primero (FIFO) para evitar rezagos.
+
+      orderBy = [
+        { fechaCierre: { sort: 'asc', nulls: 'first' } },
+        { prioridad: 'desc' },
+        { fechaIngreso: 'asc' },
+      ];
+    }
+
+    // 4. Ejecución
     const [tramitesFromDb, total] = await this.prisma.$transaction([
       this.prisma.tramite.findMany({
-        where, // Inyectamos el objeto where generado por el Builder
+        where,
         skip: (pageNumber - 1) * limitNumber,
         take: limitNumber,
         orderBy,
@@ -118,12 +136,14 @@ export class TramitesService {
       this.prisma.tramite.count({ where }),
     ]);
 
-    // ... (Mismo código de cálculo de plazos) ...
     const tramites = tramitesFromDb.map((tramite) => {
       const { diasTranscurridos, estadoPlazo } = this.getPlazoInfo(tramite);
       return {
         ...tramite,
-        plazo: { diasTranscurridos, estado: estadoPlazo },
+        plazo: {
+          diasTranscurridos,
+          estado: estadoPlazo,
+        },
       };
     });
 
@@ -137,7 +157,8 @@ export class TramitesService {
       },
     };
   }
-  // --- INICIO DE LA MODIFICACIÓN: MÉTODO CREATE ---
+
+  // --- MÉTODO CREATE (Preservado) ---
   async create(createTramiteDto: CreateTramiteDto, user: User) {
     const {
       tipoRegistro,
@@ -149,116 +170,91 @@ export class TramitesService {
     } = createTramiteDto;
 
     const anio = new Date().getFullYear();
-
     const tipoDoc = await this.prisma.tipoDocumento.findUniqueOrThrow({
       where: { id: tipoDocumentoId },
     });
 
-    // --- Flujo 2: ENVÍO (Trámite Interno) ---
+    if (!user.oficinaId) {
+      throw new BadRequestException('El usuario no tiene oficina asignada.');
+    }
+    const oficinaUsuarioId = user.oficinaId;
+
     if (tipoRegistro === 'ENVIO') {
-      if (!oficinaDestinoId) {
-        throw new BadRequestException(
-          'oficinaDestinoId es requerido para el tipo de registro ENVIO.',
-        );
-      }
+      if (!oficinaDestinoId)
+        throw new BadRequestException('Falta oficina destino.');
 
-      // --- INICIO DE LA CORRECCIÓN DE TIPO (TS:2322) ---
-      // 1. Validamos que el 'user.oficinaId' (string | null) exista
-      if (!user.oficinaId) {
-        throw new BadRequestException(
-          'El usuario autenticado no tiene una oficina asignada para esta acción.',
-        );
-      }
-      // 2. Asignamos el valor (ahora 'string') a una constante segura
-      const oficinaUsuarioId = user.oficinaId;
-      // --- FIN DE LA CORRECCIÓN ---
-
-      // 3. Obtener jerarquía (usando la constante segura)
       const jerarquia = await this.obtenerJerarquiaOficina(oficinaUsuarioId);
       const numeroDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
 
-      // 4. Iniciar Transacción
       try {
         return await this.prisma.$transaction(async (tx) => {
-          // A. Crear el Trámite
-          const tramite = await tx.tramite.create({
+          const tram = await tx.tramite.create({
             data: {
               ...tramiteData,
               numeroDocumento,
               numeroDocumentoCompleto,
               tipoDocumentoId,
-              // Usamos la constante segura (string)
               oficinaRemitenteId: oficinaUsuarioId,
+              estado: EstadoTramite.EN_PROCESO,
+              // fechaCierre se queda en null por defecto (Activo)
             },
           });
 
-          // B. Crear el primer Movimiento (DERIVACION)
-          const movimiento = await tx.movimiento.create({
+          const mov = await tx.movimiento.create({
             data: {
-              tramiteId: tramite.id,
+              tramiteId: tram.id,
               tipoAccion: TipoAccion.DERIVACION,
               usuarioCreadorId: user.id,
-              // Usamos la constante segura (string)
               oficinaOrigenId: oficinaUsuarioId,
-              notas: tramiteData.notas ?? 'Inicio de trámite.',
+              notas: tram.notas ?? 'Inicio de trámite.',
             },
           });
 
-          // C. Crear el Destino del movimiento
           await tx.movimientoDestino.create({
             data: {
-              movimientoId: movimiento.id,
+              movimientoId: mov.id,
               oficinaDestinoId: oficinaDestinoId,
               tipoDestino: 'PRINCIPAL',
             },
           });
-
-          return tramite;
+          return tram;
         });
-      } catch (error) {
-        console.error('Error en transacción de creación de trámite:', error);
-        throw new InternalServerErrorException(
-          'Error al crear el trámite y primer movimiento.',
-        );
+      } catch (e) {
+        console.error(e);
+        throw new InternalServerErrorException('Error al crear envío.');
       }
     }
 
-    // --- Flujo 1: RECEPCIÓN (Trámite Externo - Lógica original) ---
     if (tipoRegistro === 'RECEPCION') {
-      if (!oficinaRemitenteId) {
-        throw new BadRequestException(
-          'oficinaRemitenteId es requerido para el tipo de registro RECEPCION.',
-        );
-      }
+      if (!oficinaRemitenteId)
+        throw new BadRequestException('Falta oficina remitente.');
 
       const jerarquia = await this.obtenerJerarquiaOficina(oficinaRemitenteId);
       const numeroDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
 
       try {
-        return this.prisma.tramite.create({
+        return await this.prisma.tramite.create({
           data: {
             ...tramiteData,
             numeroDocumento,
             numeroDocumentoCompleto,
             tipoDocumentoId,
-            oficinaRemitenteId: oficinaRemitenteId,
+            oficinaRemitenteId,
+            estado: EstadoTramite.EN_PROCESO,
           },
         });
-      } catch (error) {
-        console.error('Error en creación simple de trámite:', error);
-        throw new InternalServerErrorException(
-          'Error al crear el trámite de recepción.',
-        );
+      } catch (e) {
+        console.error(e);
+        throw new InternalServerErrorException('Error al crear recepción.');
       }
     }
 
-    throw new BadRequestException('tipoRegistro debe ser RECEPCION o ENVIO.');
+    throw new BadRequestException('Tipo de registro inválido.');
   }
-  // --- FIN DE LA MODIFICACIÓN ---
 
-  // --- El método obtenerJerarquiaOficina se mantiene 100% igual ---
+  // --- AUXILIARES (Preservados) ---
+
   private async obtenerJerarquiaOficina(oficinaId: string): Promise<string> {
-    // ... (Lógica idéntica a la provista) ...
     let oficinaActual: (Oficina & { parent?: Oficina | null }) | null =
       await this.prisma.oficina.findUnique({
         where: { id: oficinaId },
@@ -280,9 +276,7 @@ export class TramitesService {
     return siglas.join('/');
   }
 
-  // --- El método findOne se mantiene 100% igual ---
   async findOne(id: string) {
-    // ... (Lógica idéntica a la provista) ...
     const tramite = await this.prisma.tramite.findUnique({
       where: { id },
       include: {
@@ -293,15 +287,9 @@ export class TramitesService {
           include: {
             oficinaOrigen: true,
             usuarioCreador: true,
-            destinos: {
-              include: {
-                oficinaDestino: true,
-              },
-            },
+            destinos: { include: { oficinaDestino: true } },
           },
-          orderBy: {
-            createdAt: 'asc',
-          },
+          orderBy: { createdAt: 'asc' },
         },
         anotaciones: {
           include: { autor: true },
@@ -310,22 +298,14 @@ export class TramitesService {
       },
     });
 
-    if (!tramite) {
-      throw new NotFoundException(`Trámite con ID "${id}" no encontrado`);
-    }
+    if (!tramite) throw new NotFoundException(`Trámite ${id} no encontrado`);
 
-    const { diasTranscurridos, estadoPlazo } = this.getPlazoInfo(tramite);
-
-    return {
-      ...tramite,
-      plazo: {
-        diasTranscurridos,
-        estado: estadoPlazo,
-      },
-    };
+    const { diasTranscurridos, estadoPlazo } = this.getPlazoInfo(
+      tramite as any,
+    );
+    return { ...tramite, plazo: { diasTranscurridos, estado: estadoPlazo } };
   }
 
-  // --- El método update se mantiene 100% igual ---
   async update(id: string, updateTramiteDto: UpdateTramiteDto) {
     await this.findOne(id);
     return this.prisma.tramite.update({
@@ -334,45 +314,35 @@ export class TramitesService {
     });
   }
 
-  // --- El método remove se mantiene 100% igual ---
   async remove(id: string) {
-    throw new Error(
-      'La eliminación de trámites no está permitida. Se debe archivar o cerrar.',
-    );
+    throw new Error('Eliminación no permitida. Use Archivar o Cerrar.');
   }
 
-  // --- El método getPlazoInfo se mantiene 100% igual ---
   private getPlazoInfo(tramite: {
     estado: string;
     movimientos: { createdAt: Date }[];
     fechaIngreso: Date;
-  }): { diasTranscurridos: number | null; estadoPlazo: EstadoPlazo } {
-    // ... (Lógica idéntica a la provista) ...
-    if (tramite.estado !== 'ABIERTO') {
-      return { diasTranscurridos: null, estadoPlazo: 'NO_APLICA' };
+  }) {
+    // Solo calculamos plazo si está EN_PROCESO (o ABIERTO para compatibilidad legacy)
+    if (tramite.estado !== 'EN_PROCESO' && tramite.estado !== 'ABIERTO') {
+      return {
+        diasTranscurridos: null,
+        estadoPlazo: 'NO_APLICA' as EstadoPlazo,
+      };
     }
-
-    let fechaReferencia: Date;
-    if (tramite.movimientos?.length > 0) {
-      fechaReferencia =
-        tramite.movimientos[tramite.movimientos.length - 1].createdAt;
-    } else {
-      fechaReferencia = tramite.fechaIngreso;
-    }
+    let fechaReferencia =
+      tramite.movimientos?.length > 0
+        ? tramite.movimientos[tramite.movimientos.length - 1].createdAt
+        : tramite.fechaIngreso;
 
     const diasTranscurridos = this.plazoService.calcularDiasHabiles(
       fechaReferencia,
       new Date(),
     );
 
-    let estadoPlazo: EstadoPlazo;
-    if (diasTranscurridos >= 7) {
-      estadoPlazo = 'VENCIDO';
-    } else if (diasTranscurridos >= 5) {
-      estadoPlazo = 'POR_VENCER';
-    } else {
-      estadoPlazo = 'A_TIEMPO';
-    }
+    let estadoPlazo: EstadoPlazo = 'A_TIEMPO';
+    if (diasTranscurridos >= 7) estadoPlazo = 'VENCIDO';
+    else if (diasTranscurridos >= 5) estadoPlazo = 'POR_VENCER';
 
     return { diasTranscurridos, estadoPlazo };
   }
