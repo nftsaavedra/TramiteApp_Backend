@@ -4,19 +4,16 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   MinLength,
 } from 'class-validator';
 import { PrioridadTramite } from '@prisma/client';
 
-// 1. Definimos el enum para el tipo de registro
 enum TipoRegistroTramite {
   RECEPCION = 'RECEPCION',
   ENVIO = 'ENVIO',
 }
 
 export class CreateTramiteDto {
-  // --- CAMPO AÑADIDO (Control de Flujo) ---
   @IsEnum(TipoRegistroTramite)
   @IsNotEmpty()
   tipoRegistro: TipoRegistroTramite;
@@ -42,27 +39,27 @@ export class CreateTramiteDto {
   @IsOptional()
   prioridad?: PrioridadTramite;
 
+  // CAMBIO 1: Asegurar que valide string ISO, pero el tipo TS sea string para evitar conflictos de transformación automática
   @IsDateString()
   @IsNotEmpty()
-  fechaDocumento: Date;
+  fechaDocumento: string;
 
-  // --- IDs de Relaciones (Ajustados) ---
+  // --- IDs de Relaciones ---
 
-  @IsUUID()
+  // CAMBIO 2: Usar @IsString() en lugar de @IsUUID() porque usas CUIDs en Prisma
+  @IsString()
   @IsNotEmpty()
   tipoDocumentoId: string;
 
-  // 2. Ajustado a Opcional (Requerido solo para RECEPCION)
-  @IsUUID()
+  @IsString()
   @IsOptional()
   oficinaRemitenteId?: string;
 
-  // 3. CAMPO AÑADIDO (Requerido solo para ENVIO)
-  @IsUUID()
+  @IsString()
   @IsOptional()
   oficinaDestinoId?: string;
 
-  @IsUUID()
+  @IsString()
   @IsOptional()
   usuarioAsignadoId?: string;
 }
