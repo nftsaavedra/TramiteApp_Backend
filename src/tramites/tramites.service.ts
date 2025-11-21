@@ -33,6 +33,11 @@ export class TramitesService {
       prioridad,
       oficinaId,
       tipoDocumentoId,
+      // 1. RECUPERAMOS LOS FILTROS DE FECHA (Antes se ignoraban)
+      fechaDocumentoDesde,
+      fechaDocumentoHasta,
+      creadoDesde,
+      creadoHasta,
       page = '1',
       limit = '10',
       sortBy,
@@ -41,17 +46,37 @@ export class TramitesService {
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
+    // Inicializamos el objeto Where
     const where: Prisma.TramiteWhereInput = {};
 
-    // 1. Búsqueda de Texto
+    // 2. BÚSQUEDA INTELIGENTE (Smart Search)
+    // Divide "dgi oficio" en ["dgi", "oficio"] y obliga a que CADA término coincida en ALGÚN campo
     if (q) {
-      where.OR = [
-        { asunto: { contains: q, mode: 'insensitive' } },
-        { numeroDocumentoCompleto: { contains: q, mode: 'insensitive' } },
-      ];
+      const terms = q.trim().split(/\s+/); // Dividir por espacios
+
+      where.AND = terms.map((term) => ({
+        OR: [
+          { asunto: { contains: term, mode: 'insensitive' } },
+          { numeroDocumentoCompleto: { contains: term, mode: 'insensitive' } },
+          // Buscamos también en las relaciones (Magia de Prisma)
+          {
+            oficinaRemitente: {
+              siglas: { contains: term, mode: 'insensitive' },
+            },
+          },
+          {
+            oficinaRemitente: {
+              nombre: { contains: term, mode: 'insensitive' },
+            },
+          },
+          {
+            tipoDocumento: { nombre: { contains: term, mode: 'insensitive' } },
+          },
+        ],
+      }));
     }
 
-    // 2. Filtros
+    // 3. FILTROS DE ARRAY (Exactos)
     if (estado && estado.length > 0) {
       where.estado = { in: estado };
     }
@@ -65,13 +90,34 @@ export class TramitesService {
       where.tipoDocumentoId = { in: tipoDocumentoId };
     }
 
-    // 3. ORDENAMIENTO (Lógica de Negocio Mejorada - Triaje)
-    let orderBy:
-      | Prisma.TramiteOrderByWithRelationInput
-      | Prisma.TramiteOrderByWithRelationInput[];
+    // 4. FILTROS DE FECHA (Rangos)
+    // A. Fecha del Documento (Lo que dice el papel)
+    if (fechaDocumentoDesde || fechaDocumentoHasta) {
+      where.fechaDocumento = {};
+      if (fechaDocumentoDesde) {
+        where.fechaDocumento.gte = new Date(fechaDocumentoDesde);
+      }
+      if (fechaDocumentoHasta) {
+        // Ajustamos al final del día si es necesario, o confiamos en el ISO del frontend
+        where.fechaDocumento.lte = new Date(fechaDocumentoHasta);
+      }
+    }
+
+    // B. Fecha de Ingreso/Sistema (Auditoría)
+    if (creadoDesde || creadoHasta) {
+      where.fechaIngreso = {}; // O 'createdAt' si prefieres la marca de tiempo del sistema
+      if (creadoDesde) {
+        where.fechaIngreso.gte = new Date(creadoDesde);
+      }
+      if (creadoHasta) {
+        where.fechaIngreso.lte = new Date(creadoHasta);
+      }
+    }
+
+    // 5. ORDENAMIENTO
+    let orderBy: Prisma.TramiteOrderByWithRelationInput = {};
 
     if (sortBy) {
-      // Si el usuario fuerza un orden (click en columna), lo respetamos
       const [field, direction] = sortBy.split(':');
       const validFields = [
         'fechaIngreso',
@@ -89,27 +135,10 @@ export class TramitesService {
         orderBy = { fechaIngreso: 'desc' };
       }
     } else {
-      // --- ORDENAMIENTO POR DEFECTO (EL CEREBRO DEL SISTEMA) ---
-      // Regla 1: Segregación de Estado.
-      // Usamos 'fechaCierre' con 'nulls: first'.
-      // Esto pone TODOS los trámites activos (fechaCierre: null) al principio de la lista.
-      // Los finalizados/archivados se van al fondo automáticamente.
-
-      // Regla 2: Prioridad.
-      // Dentro de los activos, lo URGENTE va primero.
-      // (Postgres respeta el orden del Enum: BAJA < NORMAL < ALTA < URGENTE)
-
-      // Regla 3: Antigüedad.
-      // Si tienen misma prioridad, el más antiguo va primero (FIFO) para evitar rezagos.
-
-      orderBy = [
-        { fechaCierre: { sort: 'asc', nulls: 'first' } },
-        { prioridad: 'desc' },
-        { fechaIngreso: 'asc' },
-      ];
+      orderBy = { fechaIngreso: 'desc' };
     }
 
-    // 4. Ejecución
+    // 6. EJECUCIÓN
     const [tramitesFromDb, total] = await this.prisma.$transaction([
       this.prisma.tramite.findMany({
         where,
@@ -158,8 +187,12 @@ export class TramitesService {
     };
   }
 
-  // --- MÉTODO CREATE (Preservado) ---
+  // --- (Resto de métodos: create, findOne, update, etc. se mantienen IGUALES) ---
+  // ... Asegúrate de mantener el create, findOne, update, remove, y auxiliares que ya tenías ...
+
+  // --- COPIA AQUÍ EL RESTO DE MÉTODOS QUE YA FUNCIONABAN EN TU ARCHIVO ANTERIOR ---
   async create(createTramiteDto: CreateTramiteDto, user: User) {
+    // ... (Tu implementación de create corregida anteriormente)
     const {
       tipoRegistro,
       tipoDocumentoId,
@@ -196,7 +229,6 @@ export class TramitesService {
               tipoDocumentoId,
               oficinaRemitenteId: oficinaUsuarioId,
               estado: EstadoTramite.EN_PROCESO,
-              // fechaCierre se queda en null por defecto (Activo)
             },
           });
 
@@ -251,8 +283,6 @@ export class TramitesService {
 
     throw new BadRequestException('Tipo de registro inválido.');
   }
-
-  // --- AUXILIARES (Preservados) ---
 
   private async obtenerJerarquiaOficina(oficinaId: string): Promise<string> {
     let oficinaActual: (Oficina & { parent?: Oficina | null }) | null =
@@ -323,7 +353,6 @@ export class TramitesService {
     movimientos: { createdAt: Date }[];
     fechaIngreso: Date;
   }) {
-    // Solo calculamos plazo si está EN_PROCESO (o ABIERTO para compatibilidad legacy)
     if (tramite.estado !== 'EN_PROCESO' && tramite.estado !== 'ABIERTO') {
       return {
         diasTranscurridos: null,
