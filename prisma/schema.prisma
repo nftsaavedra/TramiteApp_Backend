@@ -54,21 +54,29 @@ enum TipoOficina {
 }
 
 model Oficina {
-  id                 String              @id @default(cuid())
-  nombre             String              @unique
-  siglas             String              @unique
+  id                 String       @id @default(cuid())
+  nombre             String       @unique
+  siglas             String       @unique
   tipo               TipoOficina
-  isActive           Boolean             @default(true)
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
+  isActive           Boolean      @default(true)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
   parentId           String?
-  parent             Oficina?            @relation("JerarquiaOficinas", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children           Oficina[]           @relation("JerarquiaOficinas")
+  parent             Oficina?     @relation("JerarquiaOficinas", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children           Oficina[]    @relation("JerarquiaOficinas")
   usuarios           User[]
-  tramitesOriginados Tramite[]
-  movimientosOrigen  Movimiento[]
-  movimientosDestino MovimientoDestino[]
-  esInquilino Boolean @default(false)
+  
+  // --- Relaciones de Trámites ---
+  tramitesOriginados Tramite[]    @relation("Remitente")
+  tramitesRecibidos  Tramite[]    @relation("DestinoPrincipal")
+  tramitesEnCopia    Tramite[]    @relation("TramiteCopias")
+
+  // --- Relaciones de Movimientos ---
+  movimientosOrigen  Movimiento[] @relation("MovimientoOrigen")
+  movimientosDestino Movimiento[] @relation("MovimientoDestino")
+
+  esInquilino        Boolean      @default(false)
+
   @@map("oficinas")
 }
 
@@ -87,15 +95,11 @@ model TipoDocumento {
 // -------------------
 // Modelos del Core de Trámites
 // -------------------
-
 model Tramite {
   id                      String           @id @default(cuid())
-  // --- AJUSTE: Campos para el número de documento ---
-  numeroDocumento         String // El 'XXX' que ingresa el usuario
-  numeroDocumentoCompleto String // El nombre completo generado por el sistema
-  // ----------------------------------------------------
+  numeroDocumento         String
+  nombreDocumentoCompleto String
   asunto                  String
-  notas                   String?
   observaciones           String?
   estado                  EstadoTramite    @default(EN_PROCESO)
   prioridad               PrioridadTramite @default(NORMAL)
@@ -104,14 +108,27 @@ model Tramite {
   fechaCierre             DateTime?
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
-  tipoDocumento           TipoDocumento    @relation(fields: [tipoDocumentoId], references: [id])
+  
   tipoDocumentoId         String
-  oficinaRemitente        Oficina          @relation(fields: [oficinaRemitenteId], references: [id])
+  tipoDocumento           TipoDocumento    @relation(fields: [tipoDocumentoId], references: [id])
+  
+  // Remitente (Quien envía)
   oficinaRemitenteId      String
-  usuarioAsignado         User?            @relation("TramitesAsignados", fields: [usuarioAsignadoId], references: [id])
+  oficinaRemitente        Oficina          @relation("Remitente", fields: [oficinaRemitenteId], references: [id])
+
+  // Destinatario Principal (Para / Action Owner)
+  oficinaDestinoId        String?
+  oficinaDestino          Oficina?         @relation("DestinoPrincipal", fields: [oficinaDestinoId], references: [id])
+
+  // Copias (CC / Informativo) - Solo registro, no genera movimientos automáticos
+  copias                  Oficina[]        @relation("TramiteCopias")
+
   usuarioAsignadoId       String?
+  usuarioAsignado         User?            @relation("TramitesAsignados", fields: [usuarioAsignadoId], references: [id])
+  
   movimientos             Movimiento[]
   anotaciones             Anotacion[]
+
   @@map("tramites")
 }
 
@@ -128,29 +145,44 @@ enum PrioridadTramite {
   URGENTE
 }
 
-
 model Movimiento {
-  id                      String        @id @default(cuid())
+  id                      String         @id @default(cuid())
   tipoAccion              TipoAccion
-  // --- AJUSTE: Campos para el número de documento del movimiento ---
-  numeroDocumento         String? // El 'XXX' manual y opcional
-  numeroDocumentoCompleto String? // El nombre completo generado y opcional
-  // ----------------------------------------------------------------
+  
+  numeroDocumento         String?
+  nombreDocumentoCompleto String?
+  asunto                  String?
+  
   fechaDocumento          DateTime?
   notas                   String?
   observaciones           String?
+  
+  // Flag informativo (por si en el futuro decides registrar una copia manualmente)
+  esCopia                 Boolean        @default(false)
+
   fechaCierre             DateTime?
-  createdAt               DateTime      @default(now())
-  updatedAt               DateTime      @updatedAt
-  tramite                 Tramite       @relation(fields: [tramiteId], references: [id])
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
+  
   tramiteId               String
-  usuarioCreador          User          @relation(fields: [usuarioCreadorId], references: [id])
+  tramite                 Tramite        @relation(fields: [tramiteId], references: [id])
+  
   usuarioCreadorId        String
-  oficinaOrigen           Oficina       @relation(fields: [oficinaOrigenId], references: [id])
+  usuarioCreador          User           @relation(fields: [usuarioCreadorId], references: [id])
+  
+  // ORIGEN (De dónde sale)
   oficinaOrigenId         String
-  tipoDocumento           TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+  oficinaOrigen           Oficina        @relation("MovimientoOrigen", fields: [oficinaOrigenId], references: [id])
+  
+  // DESTINO (A dónde llega)
+  oficinaDestinoId        String?
+  oficinaDestino          Oficina?       @relation("MovimientoDestino", fields: [oficinaDestinoId], references: [id])
+
   tipoDocumentoId         String?
-  destinos                MovimientoDestino[]
+  tipoDocumento           TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+  
+  anotaciones             Anotacion[]
+
   @@map("movimientos")
 }
 
@@ -160,29 +192,6 @@ enum TipoAccion {
   ASIGNACION
   ARCHIVO
   CIERRE
-}
-
-model MovimientoDestino {
-  id               String        @id @default(cuid())
-  tipoDestino      TipoDestino   @default(PRINCIPAL)
-  fechaRecepcion   DateTime?
-  estado           EstadoDestino @default(PENDIENTE)
-  movimiento       Movimiento    @relation(fields: [movimientoId], references: [id])
-  movimientoId     String
-  oficinaDestino   Oficina       @relation(fields: [oficinaDestinoId], references: [id])
-  oficinaDestinoId String
-  @@map("movimiento_destinos")
-}
-
-enum TipoDestino {
-  PRINCIPAL
-  COPIA
-}
-
-enum EstadoDestino {
-  PENDIENTE
-  RECIBIDO
-  ATENDIDO
 }
 
 model Anotacion {
