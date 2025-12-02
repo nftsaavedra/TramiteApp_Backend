@@ -95,6 +95,7 @@ model TipoDocumento {
 // -------------------
 // Modelos del Core de Trámites
 // -------------------
+
 model Tramite {
   id                      String           @id @default(cuid())
   numeroDocumento         String
@@ -144,6 +145,7 @@ enum PrioridadTramite {
   ALTA
   URGENTE
 }
+
 
 model Movimiento {
   id                      String         @id @default(cuid())
@@ -195,13 +197,20 @@ enum TipoAccion {
 }
 
 model Anotacion {
-  id        String   @id @default(cuid())
-  contenido String
-  createdAt DateTime @default(now())
-  tramite   Tramite  @relation(fields: [tramiteId], references: [id])
-  tramiteId String
-  autor     User     @relation(fields: [autorId], references: [id])
-  autorId   String
+  id           String      @id @default(cuid())
+  contenido    String
+  createdAt    DateTime    @default(now())
+  
+  tramite      Tramite     @relation(fields: [tramiteId], references: [id])
+  tramiteId    String
+  
+  // CORRECCIÓN: Agregada la relación opcional con Movimiento
+  movimiento   Movimiento? @relation(fields: [movimientoId], references: [id])
+  movimientoId String?
+
+  autor        User        @relation(fields: [autorId], references: [id])
+  autorId      String
+  
   @@map("anotaciones")
 }
 
