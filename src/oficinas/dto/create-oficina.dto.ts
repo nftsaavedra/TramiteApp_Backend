@@ -28,7 +28,6 @@ export class CreateOficinaDto {
   @IsOptional()
   isActive?: boolean;
 
-  @IsUUID()
   @IsOptional()
   parentId?: string | null;
 }
