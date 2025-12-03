@@ -104,7 +104,7 @@ model Tramite {
   observaciones           String?
   estado                  EstadoTramite    @default(EN_PROCESO)
   prioridad               PrioridadTramite @default(NORMAL)
-  fechaDocumento          DateTime
+  fechaRecepcion          DateTime
   fechaIngreso            DateTime         @default(now())
   fechaCierre             DateTime?
   createdAt               DateTime         @default(now())
@@ -155,7 +155,7 @@ model Movimiento {
   nombreDocumentoCompleto String?
   asunto                  String?
   
-  fechaDocumento          DateTime?
+  fechaRecepcion          DateTime?
   notas                   String?
   observaciones           String?
   
@@ -189,11 +189,8 @@ model Movimiento {
 }
 
 enum TipoAccion {
-  DERIVACION
-  RESPUESTA
-  ASIGNACION
-  ARCHIVO
-  CIERRE
+  ENVIO
+  RECEPCION
 }
 
 model Anotacion {
@@ -213,11 +210,6 @@ model Anotacion {
   
   @@map("anotaciones")
 }
-
-
-// -------------------
-// Modelos de Soporte (Trazabilidad)
-// -------------------
 
 model Feriado {
   id          String   @id @default(cuid())

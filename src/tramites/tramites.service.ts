@@ -16,7 +16,7 @@ import {
 } from '@prisma/client';
 import { FindAllTramitesDto } from './dto/find-all-tramites.dto';
 import { PlazoService } from '@/common/plazo/plazo.service';
-import { ConfigService } from '@nestjs/config'; // IMPORTANTE
+import { ConfigService } from '@nestjs/config';
 
 type EstadoPlazo = 'VENCIDO' | 'POR_VENCER' | 'A_TIEMPO' | 'NO_APLICA';
 
@@ -25,7 +25,7 @@ export class TramitesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly plazoService: PlazoService,
-    private readonly configService: ConfigService, // INYECCIÓN
+    private readonly configService: ConfigService,
   ) {}
 
   async findAll(query: FindAllTramitesDto) {
@@ -35,8 +35,8 @@ export class TramitesService {
       prioridad,
       oficinaId,
       tipoDocumentoId,
-      fechaDocumentoDesde,
-      fechaDocumentoHasta,
+      fechaRecepcionDesde,
+      fechaRecepcionHasta,
       creadoDesde,
       creadoHasta,
       page = '1',
@@ -80,12 +80,12 @@ export class TramitesService {
     if (tipoDocumentoId && tipoDocumentoId.length > 0)
       where.tipoDocumentoId = { in: tipoDocumentoId };
 
-    if (fechaDocumentoDesde || fechaDocumentoHasta) {
-      where.fechaDocumento = {};
-      if (fechaDocumentoDesde)
-        where.fechaDocumento.gte = new Date(fechaDocumentoDesde);
-      if (fechaDocumentoHasta)
-        where.fechaDocumento.lte = new Date(fechaDocumentoHasta);
+    if (fechaRecepcionDesde || fechaRecepcionHasta) {
+      where.fechaRecepcion = {};
+      if (fechaRecepcionDesde)
+        where.fechaRecepcion.gte = new Date(fechaRecepcionDesde);
+      if (fechaRecepcionHasta)
+        where.fechaRecepcion.lte = new Date(fechaRecepcionHasta);
     }
 
     if (creadoDesde || creadoHasta) {
@@ -100,7 +100,7 @@ export class TramitesService {
       const [field, direction] = sortBy.split(':');
       const validFields = [
         'fechaIngreso',
-        'fechaDocumento',
+        'fechaRecepcion', // CAMBIO
         'prioridad',
         'estado',
         'numeroDocumento',
@@ -171,6 +171,7 @@ export class TramitesService {
       numeroDocumento,
       asunto,
       copiasIds,
+      fechaRecepcion, // CAMBIO: Usamos este campo
       ...tramiteData
     } = createTramiteDto;
 
@@ -179,10 +180,7 @@ export class TramitesService {
       where: { id: tipoDocumentoId },
     });
 
-    // --- CORRECCIÓN DE LÓGICA DE OFICINA ---
     let oficinaUsuarioId = user.oficinaId;
-
-    // Si el usuario no tiene oficina, buscamos la oficina ROOT (VPIN)
     if (!oficinaUsuarioId) {
       const rootSiglas = this.configService.get<string>('ROOT_OFFICE_SIGLAS');
       if (rootSiglas) {
@@ -195,13 +193,14 @@ export class TramitesService {
       }
     }
 
-    // Si aún así no hay oficina, lanzamos error
     if (!oficinaUsuarioId) {
       throw new BadRequestException(
         'El usuario no tiene oficina asignada y no se pudo determinar la oficina principal (ROOT).',
       );
     }
-    // ----------------------------------------
+
+    // Convertimos el string ISO a Date
+    const fechaRecepcionDate = new Date(fechaRecepcion);
 
     if (tipoRegistro === 'ENVIO') {
       if (!oficinaDestinoId)
@@ -219,8 +218,9 @@ export class TramitesService {
               numeroDocumento,
               nombreDocumentoCompleto,
               tipoDocumentoId,
-              oficinaRemitenteId: oficinaUsuarioId!, // Usamos el ID resuelto
+              oficinaRemitenteId: oficinaUsuarioId!,
               oficinaDestinoId: oficinaDestinoId,
+              fechaRecepcion: fechaRecepcionDate, // CAMBIO
               copias:
                 copiasIds && copiasIds.length > 0
                   ? { connect: copiasIds.map((id) => ({ id })) }
@@ -232,7 +232,7 @@ export class TramitesService {
           await tx.movimiento.create({
             data: {
               tramiteId: tram.id,
-              tipoAccion: TipoAccion.DERIVACION,
+              tipoAccion: TipoAccion.ENVIO,
               usuarioCreadorId: user.id,
               oficinaOrigenId: oficinaUsuarioId!,
               oficinaDestinoId: oficinaDestinoId,
@@ -266,8 +266,8 @@ export class TramitesService {
             nombreDocumentoCompleto,
             tipoDocumentoId,
             oficinaRemitenteId,
-            // En recepción, el destino soy yo (o la oficina ROOT que estoy operando)
             oficinaDestinoId: oficinaUsuarioId,
+            fechaRecepcion: fechaRecepcionDate, // CAMBIO
             estado: EstadoTramite.EN_PROCESO,
           },
         });
@@ -348,6 +348,7 @@ export class TramitesService {
   private getPlazoInfo(tramite: {
     estado: string;
     movimientos: { createdAt: Date }[];
+    fechaRecepcion: Date; // CAMBIO
     fechaIngreso: Date;
   }) {
     if (tramite.estado !== 'EN_PROCESO' && tramite.estado !== 'ABIERTO') {
@@ -356,10 +357,11 @@ export class TramitesService {
         estadoPlazo: 'NO_APLICA' as EstadoPlazo,
       };
     }
+
     let fechaReferencia =
       tramite.movimientos?.length > 0
         ? tramite.movimientos[tramite.movimientos.length - 1].createdAt
-        : tramite.fechaIngreso;
+        : tramite.fechaRecepcion;
 
     const diasTranscurridos = this.plazoService.calcularDiasHabiles(
       fechaReferencia,

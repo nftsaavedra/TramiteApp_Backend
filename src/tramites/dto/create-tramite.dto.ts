@@ -28,8 +28,6 @@ export class CreateTramiteDto {
   @MinLength(5)
   asunto: string;
 
-  // Se eliminó el campo 'notas' ya que se usan Anotaciones y no existe en el modelo Tramite
-
   @IsString()
   @IsOptional()
   observaciones?: string;
@@ -38,14 +36,13 @@ export class CreateTramiteDto {
   @IsOptional()
   prioridad?: PrioridadTramite;
 
-  // CAMBIO 1: Asegurar que valide string ISO, pero el tipo TS sea string para evitar conflictos de transformación automática
+  // CAMBIO: Renombrado a fechaRecepcion. Debe incluir hora.
   @IsDateString()
   @IsNotEmpty()
-  fechaDocumento: string;
+  fechaRecepcion: string;
 
   // --- IDs de Relaciones ---
 
-  // CAMBIO 2: Usar @IsString() en lugar de @IsUUID() porque usas CUIDs en Prisma
   @IsString()
   @IsNotEmpty()
   tipoDocumentoId: string;
@@ -58,7 +55,6 @@ export class CreateTramiteDto {
   @IsOptional()
   oficinaDestinoId?: string;
 
-  // NUEVO: Array de IDs para registrar las copias (Solo informativo/registro)
   @IsArray()
   @IsString({ each: true })
   @IsOptional()

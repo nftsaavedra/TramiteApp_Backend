@@ -49,11 +49,11 @@ export class FindAllTramitesDto {
   // 1. Fecha del Documento (Lo que ve el usuario en el papel) - PRIORIDAD
   @IsOptional()
   @IsISO8601()
-  fechaDocumentoDesde?: string;
+  fechaRecepcionDesde?: string;
 
   @IsOptional()
   @IsISO8601()
-  fechaDocumentoHasta?: string;
+  fechaRecepcionHasta?: string;
 
   // 2. Fecha de Registro (Cuándo se cargó en el sistema) - AUDITORÍA
   @IsOptional()

@@ -9,8 +9,8 @@ import { TipoAccion } from '@prisma/client';
 
 export class CreateMovimientoDto {
   @IsEnum(TipoAccion)
-  @IsNotEmpty()
-  tipoAccion: TipoAccion;
+  @IsOptional()
+  tipoAccion?: TipoAccion;
 
   // Número manual 'XXX', opcional para los movimientos.
   @IsString()
@@ -40,7 +40,7 @@ export class CreateMovimientoDto {
   // Se recomienda string ISO 8601 para evitar problemas de timezone al recibir el JSON
   @IsDateString()
   @IsOptional()
-  fechaDocumento?: string;
+  fechaRecepcion?: string;
 
   // CAMBIO: Destino directo único (1:1)
   // Reemplaza al array 'destinos' y la clase 'DestinoDto'

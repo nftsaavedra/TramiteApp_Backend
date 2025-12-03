@@ -10,7 +10,6 @@ import {
   Delete,
   UseGuards,
   Query,
-  // 1. Eliminar ParseUUIDPipe de las importaciones
 } from '@nestjs/common';
 import { TramitesService } from './tramites.service';
 import { CreateTramiteDto } from './dto/create-tramite.dto';
@@ -36,19 +35,16 @@ export class TramitesController {
   }
 
   @Get(':id')
-  // 2. Eliminar el Pipe
   findOne(@Param('id') id: string) {
     return this.tramitesService.findOne(id);
   }
 
   @Patch(':id')
-  // 2. Eliminar el Pipe
   update(@Param('id') id: string, @Body() updateTramiteDto: UpdateTramiteDto) {
     return this.tramitesService.update(id, updateTramiteDto);
   }
 
   @Delete(':id')
-  // 2. Eliminar el Pipe
   remove(@Param('id') id: string) {
     return this.tramitesService.remove(id);
   }
