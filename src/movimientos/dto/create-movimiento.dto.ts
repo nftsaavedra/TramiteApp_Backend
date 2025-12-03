@@ -1,34 +1,26 @@
 import {
-  IsArray,
   IsDateString,
   IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
-  ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { TipoAccion, TipoDestino } from '@prisma/client';
-
-class DestinoDto {
-  @IsNotEmpty()
-  oficinaDestinoId: string;
-
-  @IsEnum(TipoDestino)
-  @IsOptional()
-  tipoDestino?: TipoDestino;
-}
+import { TipoAccion } from '@prisma/client';
 
 export class CreateMovimientoDto {
   @IsEnum(TipoAccion)
   @IsNotEmpty()
   tipoAccion: TipoAccion;
 
-  // --- CAMPO AÑADIDO ---
   // Número manual 'XXX', opcional para los movimientos.
   @IsString()
   @IsOptional()
   numeroDocumento?: string;
+
+  // NUEVO: Asunto específico del movimiento
+  @IsString()
+  @IsOptional()
+  asunto?: string;
 
   @IsString()
   @IsOptional()
@@ -41,15 +33,18 @@ export class CreateMovimientoDto {
   @IsNotEmpty()
   tramiteId: string;
 
+  @IsString()
   @IsOptional()
   tipoDocumentoId?: string;
 
-  // @IsDateString()
+  // Se recomienda string ISO 8601 para evitar problemas de timezone al recibir el JSON
+  @IsDateString()
   @IsOptional()
-  fechaDocumento?: Date;
+  fechaDocumento?: string;
 
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => DestinoDto)
-  destinos: DestinoDto[];
+  // CAMBIO: Destino directo único (1:1)
+  // Reemplaza al array 'destinos' y la clase 'DestinoDto'
+  @IsString()
+  @IsOptional()
+  oficinaDestinoId?: string;
 }

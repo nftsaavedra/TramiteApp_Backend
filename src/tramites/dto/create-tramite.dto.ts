@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsDateString,
   IsEnum,
   IsNotEmpty,
@@ -27,9 +28,7 @@ export class CreateTramiteDto {
   @MinLength(5)
   asunto: string;
 
-  @IsString()
-  @IsOptional()
-  notas?: string;
+  // Se eliminó el campo 'notas' ya que se usan Anotaciones y no existe en el modelo Tramite
 
   @IsString()
   @IsOptional()
@@ -58,6 +57,12 @@ export class CreateTramiteDto {
   @IsString()
   @IsOptional()
   oficinaDestinoId?: string;
+
+  // NUEVO: Array de IDs para registrar las copias (Solo informativo/registro)
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  copiasIds?: string[];
 
   @IsString()
   @IsOptional()

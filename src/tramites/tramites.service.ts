@@ -33,7 +33,6 @@ export class TramitesService {
       prioridad,
       oficinaId,
       tipoDocumentoId,
-      // 1. RECUPERAMOS LOS FILTROS DE FECHA (Antes se ignoraban)
       fechaDocumentoDesde,
       fechaDocumentoHasta,
       creadoDesde,
@@ -46,19 +45,16 @@ export class TramitesService {
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
-    // Inicializamos el objeto Where
     const where: Prisma.TramiteWhereInput = {};
 
-    // 2. BÚSQUEDA INTELIGENTE (Smart Search)
-    // Divide "dgi oficio" en ["dgi", "oficio"] y obliga a que CADA término coincida en ALGÚN campo
+    // 2. BÚSQUEDA INTELIGENTE
     if (q) {
       const terms = q.trim().split(/\s+/); // Dividir por espacios
 
       where.AND = terms.map((term) => ({
         OR: [
           { asunto: { contains: term, mode: 'insensitive' } },
-          { numeroDocumentoCompleto: { contains: term, mode: 'insensitive' } },
-          // Buscamos también en las relaciones (Magia de Prisma)
+          { nombreDocumentoCompleto: { contains: term, mode: 'insensitive' } },
           {
             oficinaRemitente: {
               siglas: { contains: term, mode: 'insensitive' },
@@ -76,7 +72,7 @@ export class TramitesService {
       }));
     }
 
-    // 3. FILTROS DE ARRAY (Exactos)
+    // 3. FILTROS EXACTOS
     if (estado && estado.length > 0) {
       where.estado = { in: estado };
     }
@@ -90,22 +86,19 @@ export class TramitesService {
       where.tipoDocumentoId = { in: tipoDocumentoId };
     }
 
-    // 4. FILTROS DE FECHA (Rangos)
-    // A. Fecha del Documento (Lo que dice el papel)
+    // 4. FILTROS DE FECHA
     if (fechaDocumentoDesde || fechaDocumentoHasta) {
       where.fechaDocumento = {};
       if (fechaDocumentoDesde) {
         where.fechaDocumento.gte = new Date(fechaDocumentoDesde);
       }
       if (fechaDocumentoHasta) {
-        // Ajustamos al final del día si es necesario, o confiamos en el ISO del frontend
         where.fechaDocumento.lte = new Date(fechaDocumentoHasta);
       }
     }
 
-    // B. Fecha de Ingreso/Sistema (Auditoría)
     if (creadoDesde || creadoHasta) {
-      where.fechaIngreso = {}; // O 'createdAt' si prefieres la marca de tiempo del sistema
+      where.fechaIngreso = {};
       if (creadoDesde) {
         where.fechaIngreso.gte = new Date(creadoDesde);
       }
@@ -125,7 +118,7 @@ export class TramitesService {
         'prioridad',
         'estado',
         'numeroDocumento',
-        'numeroDocumentoCompleto',
+        'nombreDocumentoCompleto',
         'asunto',
       ];
 
@@ -138,7 +131,7 @@ export class TramitesService {
       orderBy = { fechaIngreso: 'desc' };
     }
 
-    // 6. EJECUCIÓN
+    // 6. EJECUCIÓN CON RELACIONES ACTUALIZADAS
     const [tramitesFromDb, total] = await this.prisma.$transaction([
       this.prisma.tramite.findMany({
         where,
@@ -148,16 +141,15 @@ export class TramitesService {
         include: {
           oficinaRemitente: { select: { nombre: true, siglas: true } },
           tipoDocumento: { select: { nombre: true } },
+          // Incluimos el destino principal para saber a dónde va el trámite globalmente
+          oficinaDestino: { select: { nombre: true, siglas: true } },
           movimientos: {
             orderBy: { createdAt: 'desc' },
             take: 1,
+            // Incluimos el destino del último movimiento
             include: {
-              destinos: {
-                take: 1,
-                include: {
-                  oficinaDestino: { select: { nombre: true, siglas: true } },
-                },
-              },
+              oficinaDestino: { select: { nombre: true, siglas: true } },
+              oficinaOrigen: { select: { nombre: true, siglas: true } },
             },
           },
         },
@@ -187,18 +179,15 @@ export class TramitesService {
     };
   }
 
-  // --- (Resto de métodos: create, findOne, update, etc. se mantienen IGUALES) ---
-  // ... Asegúrate de mantener el create, findOne, update, remove, y auxiliares que ya tenías ...
-
-  // --- COPIA AQUÍ EL RESTO DE MÉTODOS QUE YA FUNCIONABAN EN TU ARCHIVO ANTERIOR ---
   async create(createTramiteDto: CreateTramiteDto, user: User) {
-    // ... (Tu implementación de create corregida anteriormente)
     const {
       tipoRegistro,
       tipoDocumentoId,
       oficinaRemitenteId,
       oficinaDestinoId,
       numeroDocumento,
+      asunto,
+      copiasIds,
       ...tramiteData
     } = createTramiteDto;
 
@@ -212,43 +201,54 @@ export class TramitesService {
     }
     const oficinaUsuarioId = user.oficinaId;
 
+    // CASO 1: ENVÍO (Salida de documento)
+    // Regla de Negocio: Se crea el Trámite Y el Primer Movimiento (Derivación)
     if (tipoRegistro === 'ENVIO') {
       if (!oficinaDestinoId)
         throw new BadRequestException('Falta oficina destino.');
 
+      // Generamos el correlativo jerárquico (Ej: OFICIO-001-2025-VPIN/DGI)
       const jerarquia = await this.obtenerJerarquiaOficina(oficinaUsuarioId);
-      const numeroDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
+      const nombreDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
 
       try {
         return await this.prisma.$transaction(async (tx) => {
+          // 1. Crear el Trámite (La carpeta del expediente)
           const tram = await tx.tramite.create({
             data: {
               ...tramiteData,
+              asunto,
               numeroDocumento,
-              numeroDocumentoCompleto,
+              nombreDocumentoCompleto,
               tipoDocumentoId,
-              oficinaRemitenteId: oficinaUsuarioId,
+              oficinaRemitenteId: oficinaUsuarioId, // Yo soy el remitente
+              oficinaDestinoId: oficinaDestinoId, // Va para X oficina
+              // Registro de Copias (Informativo)
+              copias:
+                copiasIds && copiasIds.length > 0
+                  ? { connect: copiasIds.map((id) => ({ id })) }
+                  : undefined,
               estado: EstadoTramite.EN_PROCESO,
             },
           });
 
-          const mov = await tx.movimiento.create({
+          // 2. Crear el Primer Movimiento (La acción de enviar/derivar)
+          // Esto es obligatorio en un ENVÍO para que aparezca en "Enviados" y "Por Recibir" del destino.
+          await tx.movimiento.create({
             data: {
               tramiteId: tram.id,
-              tipoAccion: TipoAccion.DERIVACION,
+              tipoAccion: TipoAccion.DERIVACION, // Acción inicial por defecto
               usuarioCreadorId: user.id,
               oficinaOrigenId: oficinaUsuarioId,
-              notas: tram.notas ?? 'Inicio de trámite.',
+              oficinaDestinoId: oficinaDestinoId, // Destino directo
+
+              // Trazabilidad completa del movimiento inicial
+              asunto: asunto,
+              nombreDocumentoCompleto: nombreDocumentoCompleto,
+              notas: 'Inicio de trámite (Envío).',
             },
           });
 
-          await tx.movimientoDestino.create({
-            data: {
-              movimientoId: mov.id,
-              oficinaDestinoId: oficinaDestinoId,
-              tipoDestino: 'PRINCIPAL',
-            },
-          });
           return tram;
         });
       } catch (e) {
@@ -257,22 +257,34 @@ export class TramitesService {
       }
     }
 
+    // CASO 2: RECEPCIÓN (Entrada de documento externo)
+    // Regla de Negocio: Solo se crea el Trámite. NO hay movimiento todavía.
+    // El documento "reposa" en la oficina hasta que alguien lo gestione.
     if (tipoRegistro === 'RECEPCION') {
       if (!oficinaRemitenteId)
         throw new BadRequestException('Falta oficina remitente.');
 
+      // En recepción, el documento viene de fuera, usamos la jerarquía del remitente (si es interno)
+      // o generamos una referencia simple si es puramente externo (dependerá de tu lógica de negocio futura)
       const jerarquia = await this.obtenerJerarquiaOficina(oficinaRemitenteId);
-      const numeroDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
+      const nombreDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
 
       try {
         return await this.prisma.tramite.create({
           data: {
             ...tramiteData,
+            asunto,
             numeroDocumento,
-            numeroDocumentoCompleto,
+            nombreDocumentoCompleto,
             tipoDocumentoId,
-            oficinaRemitenteId,
+            oficinaRemitenteId, // Viene de afuera
+
+            // IMPORTANTE: En una recepción, el destino inicial soy YO (mi oficina),
+            // porque el documento llegó aquí.
+            oficinaDestinoId: oficinaUsuarioId,
+
             estado: EstadoTramite.EN_PROCESO,
+            // No creamos movimiento aquí. El historial iniciará vacío indicando "En Bandeja de Entrada".
           },
         });
       } catch (e) {
@@ -313,11 +325,14 @@ export class TramitesService {
         oficinaRemitente: true,
         tipoDocumento: true,
         usuarioAsignado: true,
+        // Incluimos las copias para ver a quiénes más se notificó
+        copias: true,
         movimientos: {
           include: {
             oficinaOrigen: true,
             usuarioCreador: true,
-            destinos: { include: { oficinaDestino: true } },
+            // Incluimos el destino del movimiento
+            oficinaDestino: true,
           },
           orderBy: { createdAt: 'asc' },
         },

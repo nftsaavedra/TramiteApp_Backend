@@ -6,7 +6,6 @@ import {
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
 import { UpdateMovimientoDto } from './dto/update-movimiento.dto';
 import { PrismaService } from '@/prisma/prisma.service';
-// 1. IMPORTACIÓN CRÍTICA: Agregamos 'EstadoTramite'
 import { Oficina, EstadoTramite, type User } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 
@@ -21,8 +20,9 @@ export class MovimientosService {
     const {
       tramiteId,
       tipoDocumentoId,
-      destinos,
+      oficinaDestinoId, // CAMBIO: Destino único directo
       numeroDocumento,
+      asunto,
       tipoAccion,
       ...movimientoData
     } = createMovimientoDto;
@@ -39,6 +39,7 @@ export class MovimientosService {
       where: { id: oficinaOrigenId },
     });
 
+    // Lógica de validación para Cierre/Archivo
     const esAccionFinal = tipoAccion === 'ARCHIVO' || tipoAccion === 'CIERRE';
     const siglasOficinaRaiz =
       this.configService.get<string>('ROOT_OFFICE_SIGLAS');
@@ -49,48 +50,49 @@ export class MovimientosService {
       );
     }
 
-    if (!esAccionFinal && (!destinos || destinos.length === 0)) {
+    // CAMBIO: Validación de destino único
+    if (!esAccionFinal && !oficinaDestinoId) {
       throw new BadRequestException(
-        'Se debe especificar al menos un destino para esta acción.',
+        'Se debe especificar la oficina de destino para esta acción.',
       );
     }
 
-    let numeroDocumentoCompleto: string | null = null;
+    // LÓGICA DE GENERACIÓN DE NOMBRE (Igual que en Trámites)
+    let nombreDocumentoCompleto: string | null = null;
+
     if (tipoDocumentoId && numeroDocumento) {
       const anio = new Date().getFullYear();
       const tipoDoc = await this.prisma.tipoDocumento.findUniqueOrThrow({
         where: { id: tipoDocumentoId },
       });
       const jerarquia = await this.obtenerJerarquiaOficina(oficinaOrigenId);
-      numeroDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
+      // Formato estandarizado
+      nombreDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // 1. Crear el Movimiento (Destino directo)
       const nuevoMovimiento = await tx.movimiento.create({
         data: {
           ...movimientoData,
           tipoAccion,
+          // Datos del documento generado en este paso (si aplica)
           numeroDocumento,
-          numeroDocumentoCompleto,
+          nombreDocumentoCompleto,
+          asunto, // Trazabilidad específica
+
           tramiteId,
           usuarioCreadorId,
           oficinaOrigenId,
           tipoDocumentoId,
+
+          // CAMBIO: Asignación directa del destino (1:1)
+          oficinaDestinoId: esAccionFinal ? null : oficinaDestinoId,
         },
       });
 
-      if (!esAccionFinal && destinos) {
-        const destinosData = destinos.map((destino) => ({
-          movimientoId: nuevoMovimiento.id,
-          oficinaDestinoId: destino.oficinaDestinoId,
-          tipoDestino: destino.tipoDestino,
-        }));
-        await tx.movimientoDestino.createMany({ data: destinosData });
-      }
-
-      // --- CORRECCIÓN DEL ERROR DE TIPADO ---
+      // 2. Actualizar Estado del Trámite si es acción final
       if (esAccionFinal) {
-        // Usamos el Enum real en lugar de strings sueltos
         const nuevoEstado =
           tipoAccion === 'ARCHIVO'
             ? EstadoTramite.ARCHIVADO
@@ -105,15 +107,20 @@ export class MovimientosService {
         });
       }
 
+      // Retornamos el movimiento con sus relaciones para la UI
       return tx.movimiento.findUnique({
         where: { id: nuevoMovimiento.id },
-        include: { destinos: true },
+        include: {
+          oficinaDestino: true,
+          oficinaOrigen: true,
+          usuarioCreador: true,
+          tipoDocumento: true,
+        },
       });
     });
   }
 
-  // ... (Resto de métodos auxiliares findOne, findAll, update, remove se mantienen igual)
-
+  // Helper para generar la identidad del documento
   private async obtenerJerarquiaOficina(oficinaId: string): Promise<string> {
     let oficinaActual: (Oficina & { parent?: Oficina | null }) | null =
       await this.prisma.oficina.findUnique({
@@ -139,14 +146,23 @@ export class MovimientosService {
   }
 
   async findAll() {
-    return this.prisma.movimiento.findMany();
+    return this.prisma.movimiento.findMany({
+      include: {
+        oficinaOrigen: true,
+        oficinaDestino: true,
+      },
+    });
   }
 
   async findOne(id: string) {
     const movimiento = await this.prisma.movimiento.findUnique({
       where: { id },
       include: {
-        destinos: { include: { oficinaDestino: true } },
+        oficinaOrigen: true,
+        oficinaDestino: true,
+        usuarioCreador: true,
+        tipoDocumento: true,
+        anotaciones: true, // Incluimos anotaciones relacionadas
       },
     });
     if (!movimiento) {
@@ -157,10 +173,13 @@ export class MovimientosService {
 
   async update(id: string, updateMovimientoDto: UpdateMovimientoDto) {
     await this.findOne(id);
+    // Aquí iría la lógica de actualización si se permitiera editar movimientos
     return `This action updates a #${id} movimiento`;
   }
 
   async remove(id: string) {
-    throw new Error('La eliminación de movimientos no está permitida.');
+    throw new Error(
+      'La eliminación de movimientos no está permitida por auditoría.',
+    );
   }
 }
