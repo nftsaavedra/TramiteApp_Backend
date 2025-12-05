@@ -4,10 +4,11 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUUID,
   MinLength,
 } from 'class-validator';
 import { Role } from '@prisma/client';
+import { Transform } from 'class-transformer';
+import { IsCuid } from '@/common/decorators/is-cuid.decorator';
 
 export class CreateUserDto {
   @IsEmail()
@@ -27,7 +28,8 @@ export class CreateUserDto {
   @IsNotEmpty()
   role: Role;
 
-  @IsUUID()
+  @IsCuid({ message: 'El ID de la oficina debe ser un CUID válido' })
   @IsOptional()
+  @Transform(({ value }) => (value === '' ? null : value))
   oficinaId?: string | null;
 }
