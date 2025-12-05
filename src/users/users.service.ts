@@ -20,58 +20,50 @@ export class UsersService {
     private configService: ConfigService,
   ) {}
 
-  // --- MÉTODO 'create' (Mantenido igual) ---
   async create(createUserDto: CreateUserDto): Promise<Omit<User, 'password'>> {
-    const existingUser = await this.findByEmail(createUserDto.email);
-    if (existingUser) {
-      throw new ConflictException('El correo electrónico ya está en uso.');
+    try {
+      const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
+
+      const user = await this.prisma.user.create({
+        data: {
+          ...createUserDto,
+          password: hashedPassword,
+        },
+      });
+
+      const { password, ...result } = user;
+      return result;
+    } catch (error) {
+      this.handlePrismaError(error, 'Error al crear usuario');
+      throw error;
     }
-
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
-
-    const user = await this.prisma.user.create({
-      data: {
-        ...createUserDto,
-        password: hashedPassword,
-      },
-    });
-
-    const { password, ...result } = user;
-    return result;
   }
 
-  // --- MÉTODO 'findAll' CORREGIDO (name vs nombre) ---
   async findAll(query: FindAllUsersDto) {
     const { q, role, activo, page = '1', limit = '10', sortBy } = query;
 
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
-    // 1. Construcción de Filtros
     const whereBuilder = new PrismaWhereBuilder()
-      // CORRECCIÓN: Usamos 'name' según tu schema.prisma, eliminamos 'apellidos'
       .addSmartSearch(q, ['name', 'email'])
       .addInFilter('role', role);
 
     const where = whereBuilder.build();
 
-    // Lógica de Estado
     if (activo !== undefined) {
       where.isActive = activo === 'true';
     }
 
-    // 2. Ordenamiento
     let orderBy: Prisma.UserOrderByWithRelationInput = { createdAt: 'desc' };
     if (sortBy) {
       const [field, direction] = sortBy.split(':');
-      // CORRECCIÓN: Validamos 'name' en lugar de 'nombre'
       const validFields = ['name', 'email', 'role', 'createdAt'];
       if (validFields.includes(field)) {
         orderBy = { [field]: direction as Prisma.SortOrder };
       }
     }
 
-    // 3. Ejecución
     const [users, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         where,
@@ -80,7 +72,7 @@ export class UsersService {
         orderBy,
         select: {
           id: true,
-          name: true, // CORRECTO: Coincide con el schema
+          name: true,
           email: true,
           role: true,
           isActive: true,
@@ -90,7 +82,7 @@ export class UsersService {
           oficina: {
             select: {
               id: true,
-              nombre: true, // En Oficina sí es 'nombre' según línea 93 del schema
+              nombre: true,
               siglas: true,
             },
           },
@@ -109,8 +101,6 @@ export class UsersService {
       },
     };
   }
-
-  // ... (Resto de métodos findOne, update, remove, ensureSuperUserExists se mantienen igual) ...
 
   async findOne(id: string): Promise<Omit<User, 'password'>> {
     const user = await this.prisma.user.findUnique({
@@ -140,7 +130,6 @@ export class UsersService {
     });
   }
 
-  // Método interno para cambio de contraseña
   async findByIdWithPassword(id: string): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { id },
@@ -151,16 +140,25 @@ export class UsersService {
     id: string,
     updateUserDto: UpdateUserDto,
   ): Promise<Omit<User, 'password'>> {
+    // Verificar existencia previa
     await this.findOne(id);
+
+    // Si se envía password, hashear
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
     }
-    const updatedUser = await this.prisma.user.update({
-      where: { id },
-      data: updateUserDto,
-    });
-    const { password, ...result } = updatedUser;
-    return result;
+
+    try {
+      const updatedUser = await this.prisma.user.update({
+        where: { id },
+        data: updateUserDto,
+      });
+      const { password, ...result } = updatedUser;
+      return result;
+    } catch (error) {
+      this.handlePrismaError(error, 'Error al actualizar usuario');
+      throw error;
+    }
   }
 
   async remove(id: string): Promise<Omit<User, 'password'>> {
@@ -190,7 +188,7 @@ export class UsersService {
     console.log('Creando usuario ADMIN...');
     const adminDto: CreateUserDto = {
       email: adminEmail,
-      name: 'Administrador Principal', // Correcto
+      name: 'Administrador Principal',
       password: adminPassword,
       role: Role.ADMIN,
       oficinaId: null,
@@ -203,5 +201,23 @@ export class UsersService {
       },
     });
     return newUser;
+  }
+
+  // Helper para errores de Prisma
+  private handlePrismaError(error: any, messageCtx: string) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        throw new ConflictException(`${messageCtx}: El email ya está en uso.`);
+      }
+      if (error.code === 'P2003') {
+        throw new NotFoundException(
+          `${messageCtx}: La oficina referenciada no existe.`,
+        );
+      }
+      if (error.code === 'P2025') {
+        throw new NotFoundException(`${messageCtx}: Registro no encontrado.`);
+      }
+    }
+    // Si no es un error conocido, lo relanzamos o dejamos que Nest lo maneje como 500
   }
 }
