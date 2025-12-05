@@ -12,11 +12,23 @@ import { MovimientosModule } from './movimientos/movimientos.module';
 import { AnotacionesModule } from './anotaciones/anotaciones.module';
 import { FeriadosModule } from './feriados/feriados.module';
 import { PlazoModule } from './common/plazo/plazo.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    PrismaModule, UsersModule, AuthModule, OficinasModule, TiposDocumentoModule, TramitesModule, MovimientosModule, AnotacionesModule, FeriadosModule, PlazoModule],
+    PrismaModule,
+    UsersModule,
+    AuthModule,
+    OficinasModule,
+    TiposDocumentoModule,
+    TramitesModule,
+    MovimientosModule,
+    AnotacionesModule,
+    FeriadosModule,
+    PlazoModule,
+    DashboardModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
