@@ -140,6 +140,13 @@ export class UsersService {
     });
   }
 
+  // Método interno para cambio de contraseña
+  async findByIdWithPassword(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
+  }
+
   async update(
     id: string,
     updateUserDto: UpdateUserDto,
