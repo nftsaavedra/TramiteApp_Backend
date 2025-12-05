@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { UsersService } from './users/users.service'; // <-- AÑADIDO: Importamos el servicio
+import { UsersService } from './users/users.service';
 import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
