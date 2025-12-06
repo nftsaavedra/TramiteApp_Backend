@@ -10,7 +10,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-
 // -------------------
 // Modelos de Autenticación y Usuarios
 // -------------------
@@ -29,6 +28,7 @@ model User {
   movimientosCreados Movimiento[]
   tramitesAsignados  Tramite[]    @relation("TramitesAsignados")
   anotacionesCreadas Anotacion[]
+
   @@map("users")
 }
 
@@ -43,7 +43,6 @@ enum Role {
 // Modelos de Catálogo y Parametrización
 // -------------------
 
-
 enum TipoOficina {
   ORGANO_ALTA_DIRECCION
   ORGANO_DE_LINEA
@@ -54,28 +53,28 @@ enum TipoOficina {
 }
 
 model Oficina {
-  id                 String       @id @default(cuid())
-  nombre             String       @unique
-  siglas             String       @unique
-  tipo               TipoOficina
-  isActive           Boolean      @default(true)
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
-  parentId           String?
-  parent             Oficina?     @relation("JerarquiaOficinas", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  children           Oficina[]    @relation("JerarquiaOficinas")
-  usuarios           User[]
-  
+  id        String      @id @default(cuid())
+  nombre    String      @unique
+  siglas    String      @unique
+  tipo      TipoOficina
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  parentId  String?
+  parent    Oficina?    @relation("JerarquiaOficinas", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children  Oficina[]   @relation("JerarquiaOficinas")
+  usuarios  User[]
+
   // --- Relaciones de Trámites ---
-  tramitesOriginados Tramite[]    @relation("Remitente")
-  tramitesRecibidos  Tramite[]    @relation("DestinoPrincipal")
-  tramitesEnCopia    Tramite[]    @relation("TramiteCopias")
+  tramitesOriginados Tramite[] @relation("Remitente")
+  tramitesRecibidos  Tramite[] @relation("DestinoPrincipal")
+  tramitesEnCopia    Tramite[] @relation("TramiteCopias")
 
   // --- Relaciones de Movimientos ---
   movimientosOrigen  Movimiento[] @relation("MovimientoOrigen")
   movimientosDestino Movimiento[] @relation("MovimientoDestino")
 
-  esInquilino        Boolean      @default(false)
+  esInquilino Boolean @default(false)
 
   @@map("oficinas")
 }
@@ -89,6 +88,7 @@ model TipoDocumento {
   updatedAt   DateTime     @updatedAt
   tramites    Tramite[]
   movimientos Movimiento[]
+
   @@map("tipos_documento")
 }
 
@@ -109,34 +109,34 @@ model Tramite {
   fechaCierre             DateTime?
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
-  
-  tipoDocumentoId         String
-  tipoDocumento           TipoDocumento    @relation(fields: [tipoDocumentoId], references: [id])
-  
+
+  tipoDocumentoId String
+  tipoDocumento   TipoDocumento @relation(fields: [tipoDocumentoId], references: [id])
+
   // Remitente (Quien envía)
-  oficinaRemitenteId      String
-  oficinaRemitente        Oficina          @relation("Remitente", fields: [oficinaRemitenteId], references: [id])
+  oficinaRemitenteId String
+  oficinaRemitente   Oficina @relation("Remitente", fields: [oficinaRemitenteId], references: [id])
 
   // Destinatario Principal (Para / Action Owner)
-  oficinaDestinoId        String?
-  oficinaDestino          Oficina?         @relation("DestinoPrincipal", fields: [oficinaDestinoId], references: [id])
+  oficinaDestinoId String?
+  oficinaDestino   Oficina? @relation("DestinoPrincipal", fields: [oficinaDestinoId], references: [id])
 
   // Copias (CC / Informativo) - Solo registro, no genera movimientos automáticos
-  copias                  Oficina[]        @relation("TramiteCopias")
+  copias Oficina[] @relation("TramiteCopias")
 
-  usuarioAsignadoId       String?
-  usuarioAsignado         User?            @relation("TramitesAsignados", fields: [usuarioAsignadoId], references: [id])
-  
-  movimientos             Movimiento[]
-  anotaciones             Anotacion[]
+  usuarioAsignadoId String?
+  usuarioAsignado   User?   @relation("TramitesAsignados", fields: [usuarioAsignadoId], references: [id])
+
+  movimientos Movimiento[]
+  anotaciones Anotacion[]
 
   @@map("tramites")
 }
 
 enum EstadoTramite {
-  EN_PROCESO    
-  FINALIZADO    
-  ARCHIVADO     
+  EN_PROCESO
+  FINALIZADO
+  ARCHIVADO
 }
 
 enum PrioridadTramite {
@@ -146,44 +146,46 @@ enum PrioridadTramite {
   URGENTE
 }
 
-
 model Movimiento {
-  id                      String         @id @default(cuid())
-  tipoAccion              TipoAccion
-  
+  id         String     @id @default(cuid())
+  tipoAccion TipoAccion
+
   numeroDocumento         String?
   nombreDocumentoCompleto String?
   asunto                  String?
-  
-  fechaRecepcion          DateTime?
-  notas                   String?
-  observaciones           String?
-  
+
+  fechaRecepcion DateTime?
+  notas          String?
+  observaciones  String?
+
   // Flag informativo (por si en el futuro decides registrar una copia manualmente)
-  esCopia                 Boolean        @default(false)
+  esCopia Boolean @default(false)
 
-  fechaCierre             DateTime?
-  createdAt               DateTime       @default(now())
-  updatedAt               DateTime       @updatedAt
-  
-  tramiteId               String
-  tramite                 Tramite        @relation(fields: [tramiteId], references: [id])
-  
-  usuarioCreadorId        String
-  usuarioCreador          User           @relation(fields: [usuarioCreadorId], references: [id])
-  
+  fechaCierre DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // FECHA REAL DEL MOVIMIENTO (Regularización)
+  fechaMovimiento DateTime @default(now())
+
+  tramiteId String
+  tramite   Tramite @relation(fields: [tramiteId], references: [id])
+
+  usuarioCreadorId String
+  usuarioCreador   User   @relation(fields: [usuarioCreadorId], references: [id])
+
   // ORIGEN (De dónde sale)
-  oficinaOrigenId         String
-  oficinaOrigen           Oficina        @relation("MovimientoOrigen", fields: [oficinaOrigenId], references: [id])
-  
-  // DESTINO (A dónde llega)
-  oficinaDestinoId        String?
-  oficinaDestino          Oficina?       @relation("MovimientoDestino", fields: [oficinaDestinoId], references: [id])
+  oficinaOrigenId String
+  oficinaOrigen   Oficina @relation("MovimientoOrigen", fields: [oficinaOrigenId], references: [id])
 
-  tipoDocumentoId         String?
-  tipoDocumento           TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
-  
-  anotaciones             Anotacion[]
+  // DESTINO (A dónde llega)
+  oficinaDestinoId String?
+  oficinaDestino   Oficina? @relation("MovimientoDestino", fields: [oficinaDestinoId], references: [id])
+
+  tipoDocumentoId String?
+  tipoDocumento   TipoDocumento? @relation(fields: [tipoDocumentoId], references: [id])
+
+  anotaciones Anotacion[]
 
   @@map("movimientos")
 }
@@ -194,20 +196,20 @@ enum TipoAccion {
 }
 
 model Anotacion {
-  id           String      @id @default(cuid())
-  contenido    String
-  createdAt    DateTime    @default(now())
-  
-  tramite      Tramite     @relation(fields: [tramiteId], references: [id])
-  tramiteId    String
-  
+  id        String   @id @default(cuid())
+  contenido String
+  createdAt DateTime @default(now())
+
+  tramite   Tramite @relation(fields: [tramiteId], references: [id])
+  tramiteId String
+
   // CORRECCIÓN: Agregada la relación opcional con Movimiento
   movimiento   Movimiento? @relation(fields: [movimientoId], references: [id])
   movimientoId String?
 
-  autor        User        @relation(fields: [autorId], references: [id])
-  autorId      String
-  
+  autor   User   @relation(fields: [autorId], references: [id])
+  autorId String
+
   @@map("anotaciones")
 }
 
@@ -215,5 +217,6 @@ model Feriado {
   id          String   @id @default(cuid())
   fecha       DateTime @unique @db.Date
   descripcion String
+
   @@map("feriados")
 }

@@ -123,6 +123,10 @@ export class MovimientosService {
           tipoDocumentoId,
 
           oficinaDestinoId,
+
+          fechaMovimiento: movimientoData.fechaMovimiento
+            ? new Date(movimientoData.fechaMovimiento)
+            : new Date(),
         },
       });
 

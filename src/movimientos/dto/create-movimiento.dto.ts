@@ -42,6 +42,11 @@ export class CreateMovimientoDto {
   @IsOptional()
   fechaRecepcion?: string;
 
+  // NUEVO: Fecha efectiva del movimiento (Regularización)
+  @IsDateString()
+  @IsOptional()
+  fechaMovimiento?: string;
+
   // CAMBIO: Destino directo único (1:1)
   // Reemplaza al array 'destinos' y la clase 'DestinoDto'
   @IsString()

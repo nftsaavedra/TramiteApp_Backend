@@ -347,7 +347,7 @@ export class TramitesService {
 
   private getPlazoInfo(tramite: {
     estado: string;
-    movimientos: { createdAt: Date }[];
+    movimientos: { createdAt: Date; fechaMovimiento?: Date }[];
     fechaRecepcion: Date; // CAMBIO
     fechaIngreso: Date;
   }) {
@@ -360,7 +360,8 @@ export class TramitesService {
 
     let fechaReferencia =
       tramite.movimientos?.length > 0
-        ? tramite.movimientos[tramite.movimientos.length - 1].createdAt
+        ? tramite.movimientos[tramite.movimientos.length - 1].fechaMovimiento ||
+          tramite.movimientos[tramite.movimientos.length - 1].createdAt
         : tramite.fechaRecepcion;
 
     const diasTranscurridos = this.plazoService.calcularDiasHabiles(
