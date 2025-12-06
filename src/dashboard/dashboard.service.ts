@@ -35,7 +35,7 @@ export class DashboardService {
         }),
         this.prisma.tramite.count({
           where: {
-            fechaIngreso: {
+            fechaRecepcion: {
               gte: startOfWeek,
             },
           },
@@ -44,7 +44,7 @@ export class DashboardService {
           .groupBy({
             by: ['usuarioCreadorId'],
             where: {
-              createdAt: {
+              fechaMovimiento: {
                 gte: today,
                 lt: tomorrow,
               },
@@ -75,12 +75,12 @@ export class DashboardService {
 
     const result: any[] = await this.prisma.$queryRaw`
       SELECT 
-        TO_CHAR("createdAt", 'Mon') as name,
-        EXTRACT(MONTH FROM "createdAt") as month_num,
+        TO_CHAR(COALESCE("fechaRecepcion", "createdAt"), 'Mon') as name,
+        EXTRACT(MONTH FROM COALESCE("fechaRecepcion", "createdAt")) as month_num,
         COUNT(*)::int as total
       FROM tramites
-      WHERE "createdAt" >= ${startDate} AND "createdAt" < ${endDate}
-      GROUP BY TO_CHAR("createdAt", 'Mon'), EXTRACT(MONTH FROM "createdAt")
+      WHERE COALESCE("fechaRecepcion", "createdAt") >= ${startDate} AND COALESCE("fechaRecepcion", "createdAt") < ${endDate}
+      GROUP BY TO_CHAR(COALESCE("fechaRecepcion", "createdAt"), 'Mon'), EXTRACT(MONTH FROM COALESCE("fechaRecepcion", "createdAt"))
       ORDER BY month_num ASC
     `;
 
@@ -129,7 +129,7 @@ export class DashboardService {
   async getRecentActivity() {
     const movimientos = await this.prisma.movimiento.findMany({
       take: 5,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { fechaMovimiento: 'desc' },
       include: {
         usuarioCreador: { select: { name: true } },
         oficinaDestino: { select: { nombre: true, siglas: true } },
