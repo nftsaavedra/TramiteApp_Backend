@@ -188,7 +188,7 @@ export class UsersService {
     console.log('Creando usuario ADMIN...');
     const adminDto: CreateUserDto = {
       email: adminEmail,
-      name: 'Administrador Principal',
+      name: 'Super Usuario',
       password: adminPassword,
       role: Role.ADMIN,
       oficinaId: null,
