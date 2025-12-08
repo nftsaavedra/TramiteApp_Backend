@@ -181,6 +181,7 @@ export class DashboardService {
         document: docName,
         to: destino,
         color,
+        date: m.fechaMovimiento,
       };
     });
   }
