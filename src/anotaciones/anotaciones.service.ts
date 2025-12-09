@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { CreateAnotacioneDto } from './dto/create-anotacione.dto';
 import { UpdateAnotacioneDto } from './dto/update-anotacione.dto';
@@ -13,16 +14,57 @@ export class AnotacionesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createAnotacioneDto: CreateAnotacioneDto, autorId: string) {
-    const { tramiteId, contenido } = createAnotacioneDto;
+    const { tramiteId, movimientoId, contenido } = createAnotacioneDto;
 
-    // Verificamos que el trámite exista antes de añadirle una anotación
-    await this.prisma.tramite.findUniqueOrThrow({ where: { id: tramiteId } });
+    // 1. Buscamos el trámite y su último movimiento para validar reglas de negocio
+    const tramite = await this.prisma.tramite.findUniqueOrThrow({
+      where: { id: tramiteId },
+      include: {
+        movimientos: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    // 2. Regla: "solo para el ultimo movimiento activo o con estado general de tramite activo o en proceso"
+    // Interpretación:
+    // - Si se anota el TRÁMITE (general): Debe estar EN_PROCESO.
+    // - Si se anota un MOVIMIENTO: Debe ser el ÚLTIMO movimiento (el activo).
+
+    const isTramiteActivo = tramite.estado === 'EN_PROCESO';
+
+    if (movimientoId) {
+      // Validar que el movimiento existe y es el último
+      const ultimoMovimiento = tramite.movimientos[0];
+      if (!ultimoMovimiento) {
+        throw new BadRequestException(
+          'El trámite no tiene movimientos activos.',
+        );
+      }
+      if (ultimoMovimiento.id !== movimientoId) {
+        throw new BadRequestException(
+          'Solo se permite agregar anotaciones al último movimiento registrado (movimiento activo).',
+        );
+      }
+      // Nota: Si es el último movimiento, permitimos anotar incluso si el trámite cambió de estado?
+      // La regla dice "o con estado general ... activo".
+      // Asumimos que si apuntamos al último movimiento, es válido.
+    } else {
+      // Anotación General
+      if (!isTramiteActivo) {
+        throw new BadRequestException(
+          'Solo se pueden agregar anotaciones a trámites activos o en proceso.',
+        );
+      }
+    }
 
     return this.prisma.anotacion.create({
       data: {
         contenido,
         tramiteId,
         autorId,
+        movimientoId,
       },
     });
   }
@@ -34,6 +76,13 @@ export class AnotacionesService {
       include: {
         autor: {
           select: { id: true, name: true, email: true },
+        },
+        movimiento: {
+          select: {
+            id: true,
+            tipoAccion: true,
+            oficinaOrigen: { select: { siglas: true } },
+          },
         },
       },
       orderBy: {

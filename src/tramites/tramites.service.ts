@@ -315,6 +315,10 @@ export class TramitesService {
             oficinaOrigen: true,
             usuarioCreador: true,
             oficinaDestino: true,
+            anotaciones: {
+              include: { autor: true },
+              orderBy: { createdAt: 'desc' },
+            },
           },
           orderBy: { createdAt: 'asc' },
         },
