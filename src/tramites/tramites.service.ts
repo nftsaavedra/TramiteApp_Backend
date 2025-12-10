@@ -308,6 +308,7 @@ export class TramitesService {
       include: {
         oficinaRemitente: true,
         tipoDocumento: true,
+        oficinaDestino: true, // Incluimos la ubicación actual maestra
         usuarioAsignado: true,
         copias: true,
         movimientos: {
