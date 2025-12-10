@@ -130,9 +130,16 @@ export class MovimientosService {
         },
       });
 
-      // 2. Actualizar Estado del Trámite (Ya no hay CIERRE/ARCHIVO explícito en el enum,
-      // pero si se requiere lógica de cierre, se debería manejar por otro flag o estado).
-      // Por ahora, eliminamos la lógica de cierre automático basada en TipoAccion antiguo.
+      // 2. Actualizar Ubicación Actual del Tramite
+      // Sincronizamos la ubicación del trámite con el destino del movimiento
+      if (nuevoMovimiento.oficinaDestinoId) {
+        await tx.tramite.update({
+          where: { id: tramiteId },
+          data: {
+            oficinaDestinoId: nuevoMovimiento.oficinaDestinoId,
+          },
+        });
+      }
 
       // Retornamos el movimiento con sus relaciones para la UI
       return tx.movimiento.findUnique({
