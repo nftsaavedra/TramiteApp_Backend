@@ -68,62 +68,115 @@ export class DashboardService {
     };
   }
 
-  async getMonthlyVolume() {
-    const currentYear = new Date().getFullYear();
-    const startDate = new Date(currentYear, 0, 1);
-    const endDate = new Date(currentYear + 1, 0, 1);
+  async getVolumeStats(
+    groupBy: 'day' | 'week' | 'month' | 'year' = 'month',
+    limit: number = 6,
+  ) {
+    const today = new Date();
+    let startDate = new Date();
 
-    const result: any[] = await this.prisma.$queryRaw`
-      SELECT 
-        TO_CHAR(COALESCE("fechaRecepcion", "createdAt"), 'Mon') as name,
-        EXTRACT(MONTH FROM COALESCE("fechaRecepcion", "createdAt")) as month_num,
-        COUNT(*)::int as total
-      FROM tramites
-      WHERE COALESCE("fechaRecepcion", "createdAt") >= ${startDate} AND COALESCE("fechaRecepcion", "createdAt") < ${endDate}
-      GROUP BY TO_CHAR(COALESCE("fechaRecepcion", "createdAt"), 'Mon'), EXTRACT(MONTH FROM COALESCE("fechaRecepcion", "createdAt"))
-      ORDER BY month_num ASC
-    `;
+    // Calcular fecha de inicio según agrupación (Limit - 1 para incluir el periodo actual como 1)
+    const offset = limit > 0 ? limit - 1 : 0;
 
-    const monthMap: Record<string, string> = {
-      Jan: 'Ene',
-      Feb: 'Feb',
-      Mar: 'Mar',
-      Apr: 'Abr',
-      May: 'May',
-      Jun: 'Jun',
-      Jul: 'Jul',
-      Aug: 'Ago',
-      Sep: 'Sep',
-      Oct: 'Oct',
-      Nov: 'Nov',
-      Dec: 'Dic',
-    };
-
-    const finalData: { name: string; total: number }[] = [];
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-
-    for (const m of months) {
-      const found = result.find((r) => r.name.trim() === m);
-      finalData.push({
-        name: monthMap[m],
-        total: found ? found.total : 0,
-      });
+    switch (groupBy) {
+      case 'day':
+        startDate.setDate(today.getDate() - offset);
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'week':
+        // Retroceder N semanas y luego ir al inicio de esa semana (Domingo o Lunes)
+        // Aproximación simple: Hoy - offset semanas
+        startDate.setDate(today.getDate() - offset * 7);
+        // Ajustar al lunes de esa semana (opcional, date_trunc('week') lo hace en DB, pero para filtro WHERE ayuda)
+        // No es estrictamente necesario si usamos date_trunc en DB para agrupar, pero ayuda a limpiar datos parciales previos.
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'month':
+        startDate.setMonth(today.getMonth() - offset);
+        startDate.setDate(1); // Inicio de ese mes
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'year':
+        startDate.setFullYear(today.getFullYear() - offset);
+        startDate.setMonth(0, 1);
+        startDate.setHours(0, 0, 0, 0);
+        break;
     }
 
-    return finalData;
+    // Mapeo seguro para Prisma Raw Query (evitar inyección directa en string literal si fuera complejo, pero aquí usamos values controlados en switch)
+    // Prisma $queryRaw parameterization is tricky with identifiers like date_trunc unit.
+    // Usaremos casting ::text para asegurar tipos
+
+    // NOTA: Prisma no permite parametrizar identificadores (como 'month', 'day').
+    // Debemos validar estrictamente 'groupBy' antes de interpolar.
+    const validUnits = ['day', 'week', 'month', 'year'];
+    if (!validUnits.includes(groupBy)) throw new Error('Invalid groupBy unit');
+
+    /* 
+      Consulta Dinámica:
+      Agrupa por la unidad de tiempo especificada.
+      Usa COALESCE para tener fecha de recepción o creación.
+      FIX TIMEZONE: Convertimos a Lima antes de truncar para que el corte de día sea local.
+    */
+    const result: any[] = await this.prisma.$queryRawUnsafe(
+      `
+      SELECT 
+        DATE_TRUNC('${groupBy}', COALESCE("fechaRecepcion", "createdAt") AT TIME ZONE 'UTC' AT TIME ZONE 'America/Lima') as date_group,
+        COUNT(*)::int as total
+      FROM tramites
+      WHERE COALESCE("fechaRecepcion", "createdAt") >= $1
+      GROUP BY date_group
+      ORDER BY date_group ASC
+    `,
+      startDate,
+    );
+
+    // Formateo de respuesta Front-End Friendly
+    // Result.date_group viene como "2025-12-01 00:00:00" (Wall Time Lima).
+    // Al hacer new Date() en servidor UTC, se trata como "2025-12-01 00:00:00 UTC".
+    // Usamos timeZone: 'UTC' para formatear y mantener esa fecha exacta.
+    return result.map((row) => {
+      const date = new Date(row.date_group);
+      let name = '';
+
+      const fmtOpts: Intl.DateTimeFormatOptions = { timeZone: 'UTC' };
+
+      switch (groupBy) {
+        case 'day':
+          name = date.toLocaleDateString('es-ES', {
+            ...fmtOpts,
+            weekday: 'short',
+            day: 'numeric',
+          });
+          break;
+        case 'week':
+          name = `Sem ${getWeekNumber(date)}`;
+          name = date.toLocaleDateString('es-ES', {
+            ...fmtOpts,
+            month: 'short',
+            day: 'numeric',
+          });
+          break;
+        case 'month':
+          name = date.toLocaleDateString('es-ES', {
+            ...fmtOpts,
+            month: 'short',
+            year: '2-digit',
+          });
+          break;
+        case 'year':
+          // getFullYear usa local del servidor. Si servidor es UTC y date es 00:00 UTC, es correcto.
+          // Para seguridad usamos getUTCFullYear
+          name = date.getUTCFullYear().toString();
+          break;
+      }
+
+      return {
+        name: capitalize(name), // Helper para mayúscula inicial
+        date: date.toISOString(), // ISO (UTC). El frontend debe saber que esto es el inicio del periodo.
+        total: row.total,
+      };
+    });
   }
 
   async getRecentActivity() {
@@ -185,4 +238,18 @@ export class DashboardService {
       };
     });
   }
+}
+
+function capitalize(str: string) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function getWeekNumber(d: Date) {
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(
+    ((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return weekNo;
 }

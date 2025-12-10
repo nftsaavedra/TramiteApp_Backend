@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, Query } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 // import { JwtAuthGuard } from '@/auth/guards/jwt-auth.guard'; // Asumo que existe autenticación, la habilitaré si es el patrón.
 
@@ -12,9 +12,13 @@ export class DashboardController {
     return this.dashboardService.getStats();
   }
 
-  @Get('monthly-volume')
-  getMonthlyVolume() {
-    return this.dashboardService.getMonthlyVolume();
+  @Get('volume-stats')
+  getVolumeStats(
+    @Query('groupBy')
+    groupBy: 'day' | 'week' | 'month' | 'year' = 'month',
+    @Query('limit') limit: number = 6,
+  ) {
+    return this.dashboardService.getVolumeStats(groupBy, Number(limit));
   }
 
   @Get('recent-activity')
