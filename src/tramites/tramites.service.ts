@@ -254,22 +254,56 @@ export class TramitesService {
       if (!oficinaRemitenteId)
         throw new BadRequestException('Falta oficina remitente.');
 
+      // OBTENER OFICINA ROOT OBLIGATORIA
+      const rootSiglas =
+        this.configService.get<string>('ROOT_OFFICE_SIGLAS') || 'VPIN';
+      const rootOffice = await this.prisma.oficina.findUnique({
+        where: { siglas: rootSiglas },
+      });
+
+      if (!rootOffice) {
+        throw new InternalServerErrorException(
+          `Oficina Root (${rootSiglas}) no configurada.`,
+        );
+      }
+      const oficinaRecepcionId = rootOffice.id;
+
       const jerarquia = await this.obtenerJerarquiaOficina(oficinaRemitenteId);
       const nombreDocumentoCompleto = `${tipoDoc.nombre}-N°-${numeroDocumento}-${anio}-${jerarquia}`;
 
       try {
-        return await this.prisma.tramite.create({
-          data: {
-            ...tramiteData,
-            asunto,
-            numeroDocumento,
-            nombreDocumentoCompleto,
-            tipoDocumentoId,
-            oficinaRemitenteId,
-            oficinaDestinoId: oficinaUsuarioId,
-            fechaRecepcion: fechaRecepcionDate, // CAMBIO
-            estado: EstadoTramite.EN_PROCESO,
-          },
+        return await this.prisma.$transaction(async (tx) => {
+          // 1. Crear el Trámite
+          const tram = await tx.tramite.create({
+            data: {
+              ...tramiteData,
+              asunto,
+              numeroDocumento,
+              nombreDocumentoCompleto,
+              tipoDocumentoId,
+              oficinaRemitenteId,
+              oficinaDestinoId: oficinaRecepcionId, // SIEMPRE va a Root/Mesa de Partes
+              fechaRecepcion: fechaRecepcionDate,
+              estado: EstadoTramite.EN_PROCESO,
+            },
+          });
+
+          // 2. Crear Movimiento de Ingreso (Trazabilidad Inicial)
+          await tx.movimiento.create({
+            data: {
+              tramiteId: tram.id,
+              tipoAccion: TipoAccion.RECEPCION,
+              usuarioCreadorId: user.id,
+              oficinaOrigenId: oficinaRemitenteId, // Viene de fuera
+              oficinaDestinoId: oficinaRecepcionId, // Entra a Root
+              asunto: asunto,
+              nombreDocumentoCompleto: nombreDocumentoCompleto,
+              notas: 'Ingreso por Mesa de Partes (Recepción).',
+              fechaMovimiento: fechaRecepcionDate, // Usamos la fecha de recepción real
+            },
+          });
+
+          return tram;
         });
       } catch (e) {
         console.error(e);
