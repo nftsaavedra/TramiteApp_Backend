@@ -337,6 +337,94 @@ export class TramitesService {
     return { ...tramite, plazo: { diasTranscurridos, estado: estadoPlazo } };
   }
 
+  // --- FINALIZACIÓN Y ARCHIVO ---
+
+  async finalizar(id: string, contenido: string, usuario: User) {
+    const tramite = await this.prisma.tramite.findUnique({
+      where: { id },
+      include: {
+        movimientos: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { oficinaDestino: true },
+        },
+      },
+    });
+
+    if (!tramite) throw new NotFoundException('Trámite no encontrado');
+
+    if (tramite.estado !== 'EN_PROCESO') {
+      throw new BadRequestException('El trámite no está EN_PROCESO.');
+    }
+
+    // Simplificación Segura: Validamos que el trámite haya llegado a algún lado.
+    const ultimoMovimiento = tramite.movimientos[0];
+    if (!ultimoMovimiento) {
+      throw new BadRequestException('El trámite no tiene movimientos.');
+    }
+
+    // Actualizamos el trámite
+    const tramiteActualizado = await this.prisma.tramite.update({
+      where: { id },
+      data: {
+        estado: 'FINALIZADO',
+        fechaCierre: new Date(),
+      },
+    });
+
+    // Auditoría: Crear Anotación de Cierre
+    await this.prisma.anotacion.create({
+      data: {
+        contenido: `TRÁMITE FINALIZADO: ${contenido}`,
+        tramiteId: id,
+        movimientoId: ultimoMovimiento.id, // Vinculamos al último paso
+        autorId: usuario.id,
+      },
+    });
+
+    return tramiteActualizado;
+  }
+
+  async archivar(id: string, contenido: string, usuario: User) {
+    const tramite = await this.prisma.tramite.findUnique({
+      where: { id },
+      include: {
+        movimientos: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!tramite) throw new NotFoundException('Trámite no encontrado');
+
+    if (tramite.estado !== 'EN_PROCESO') {
+      throw new BadRequestException('El trámite no está EN_PROCESO.');
+    }
+
+    // Actualizamos el trámite
+    const tramiteActualizado = await this.prisma.tramite.update({
+      where: { id },
+      data: {
+        estado: 'ARCHIVADO',
+        fechaCierre: new Date(),
+        observaciones: contenido, // Guardamos también en observaciones del trámite como resumen
+      },
+    });
+
+    // Auditoría: Crear Anotación de Archivo
+    await this.prisma.anotacion.create({
+      data: {
+        contenido: `TRÁMITE ARCHIVADO: ${contenido}`,
+        tramiteId: id,
+        movimientoId: tramite.movimientos[0]?.id, // Vinculamos al último paso si existe
+        autorId: usuario.id,
+      },
+    });
+
+    return tramiteActualizado;
+  }
+
   async update(id: string, updateTramiteDto: UpdateTramiteDto) {
     await this.findOne(id);
     return this.prisma.tramite.update({

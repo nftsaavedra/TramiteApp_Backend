@@ -18,6 +18,7 @@ import { FindAllTramitesDto } from './dto/find-all-tramites.dto';
 import { JwtAuthGuard } from '@/common/guards/jwt-auth/jwt-auth.guard';
 import { GetUser } from '@/auth/decorators/get-user.decorator';
 import { type User } from '@prisma/client';
+import { CambiarEstadoTramiteDto } from './dto/cambiar-estado-tramite.dto';
 
 @Controller('tramites')
 @UseGuards(JwtAuthGuard)
@@ -37,6 +38,24 @@ export class TramitesController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.tramitesService.findOne(id);
+  }
+
+  @Patch(':id/finalizar')
+  finalizar(
+    @Param('id') id: string,
+    @Body() cambiarEstadoDto: CambiarEstadoTramiteDto,
+    @GetUser() user: User,
+  ) {
+    return this.tramitesService.finalizar(id, cambiarEstadoDto.contenido, user);
+  }
+
+  @Patch(':id/archivar')
+  archivar(
+    @Param('id') id: string,
+    @Body() cambiarEstadoDto: CambiarEstadoTramiteDto,
+    @GetUser() user: User,
+  ) {
+    return this.tramitesService.archivar(id, cambiarEstadoDto.contenido, user);
   }
 
   @Patch(':id')
