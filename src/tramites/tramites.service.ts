@@ -239,6 +239,7 @@ export class TramitesService {
               asunto: asunto,
               nombreDocumentoCompleto: nombreDocumentoCompleto,
               notas: 'Inicio de trámite (Envío).',
+              fechaMovimiento: fechaRecepcionDate, // Usamos la fecha seleccionada
             },
           });
 
