@@ -1,6 +1,6 @@
 import {
   IsBoolean,
-  IsEnum, // <-- AÑADIDO: Para validar contra el Enum
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -19,10 +19,9 @@ export class CreateOficinaDto {
   @IsNotEmpty()
   siglas: string;
 
-  // --- CAMBIO: De IsString a IsEnum ---
-  @IsEnum(TipoOficina) // Ahora valida contra los valores definidos
+  @IsEnum(TipoOficina)
   @IsNotEmpty()
-  tipo: TipoOficina; // El tipo de dato ahora es el Enum
+  tipo: TipoOficina;
 
   @IsBoolean()
   @IsOptional()

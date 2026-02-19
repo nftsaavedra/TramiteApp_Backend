@@ -1,5 +1,3 @@
-// En: src/tramites/tramites.controller.ts
-
 import {
   Controller,
   Get,

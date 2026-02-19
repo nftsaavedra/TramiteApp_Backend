@@ -4,8 +4,6 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
 
-// --- AÑADIDO: Definimos una interfaz para el payload del token ---
-// Esto mejora la seguridad de tipos y el autocompletado.
 interface JwtPayload {
   sub: string;
   email: string;
@@ -24,8 +22,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  // --- MÉTODO 'validate' CORREGIDO ---
-  // Ahora el payload tiene un tipo definido y devolvemos todos los datos necesarios.
   async validate(payload: JwtPayload) {
     return {
       id: payload.sub,

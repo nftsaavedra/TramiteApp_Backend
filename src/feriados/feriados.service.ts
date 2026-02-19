@@ -1,5 +1,3 @@
-// En: src/feriados/service/feriados.service.ts
-
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateFeriadoDto } from './dto/create-feriado.dto';
 import { UpdateFeriadoDto } from './dto/update-feriado.dto';
@@ -10,7 +8,6 @@ export class FeriadosService {
   constructor(private readonly prisma: PrismaService) {}
 
   create(createFeriadoDto: CreateFeriadoDto) {
-    // Prisma espera un objeto Date, así que lo convertimos
     return this.prisma.feriado.create({
       data: {
         ...createFeriadoDto,

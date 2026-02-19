@@ -6,27 +6,23 @@ import { ValidationPipe } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors();
+  app.enableCors({
+    origin: process.env.CORS_ORIGIN,
+  });
 
-  // 2. --- CONFIGURACIÓN CRÍTICA DE VALIDACIÓN ---
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // Elimina campos que no estén en el DTO
-      forbidNonWhitelisted: true, // Lanza error si envían campos extra
-      transform: true, // <--- ESTO ES LA CLAVE: Convierte tipos automáticamente
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
       transformOptions: {
-        enableImplicitConversion: true, // Ayuda con conversiones simples
+        enableImplicitConversion: true,
       },
     }),
   );
-  // ------------------------------------------------
 
-  // --- AÑADIDO: Lógica para crear el usuario ADMIN al iniciar ---
-  // 1. Obtenemos una instancia del UsersService
   const usersService = app.get(UsersService);
-  // 2. Ejecutamos la función para asegurar que el admin exista
   await usersService.ensureSuperUserExists();
-  // ---------------------------------------------------------
 
   await app.listen(process.env.PORT ?? 3000);
 }

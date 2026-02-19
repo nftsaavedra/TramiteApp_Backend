@@ -12,12 +12,10 @@ export class CreateMovimientoDto {
   @IsOptional()
   tipoAccion?: TipoAccion;
 
-  // Número manual 'XXX', opcional para los movimientos.
   @IsString()
   @IsOptional()
   numeroDocumento?: string;
 
-  // NUEVO: Asunto específico del movimiento
   @IsString()
   @IsOptional()
   asunto?: string;
@@ -37,18 +35,14 @@ export class CreateMovimientoDto {
   @IsOptional()
   tipoDocumentoId?: string;
 
-  // Se recomienda string ISO 8601 para evitar problemas de timezone al recibir el JSON
   @IsDateString()
   @IsOptional()
   fechaRecepcion?: string;
 
-  // NUEVO: Fecha efectiva del movimiento (Regularización)
   @IsDateString()
   @IsOptional()
   fechaMovimiento?: string;
 
-  // CAMBIO: Destino directo único (1:1)
-  // Reemplaza al array 'destinos' y la clase 'DestinoDto'
   @IsString()
   @IsOptional()
   oficinaDestinoId?: string;

@@ -1,5 +1,3 @@
-// En: src/feriados/controller/feriados.controller.ts
-
 import {
   Controller,
   Get,
@@ -19,17 +17,17 @@ import { Roles } from '@/common/decorators/roles/roles.decorator';
 import { Role } from '@prisma/client';
 
 @Controller('feriados')
-@UseGuards(JwtAuthGuard, RolesGuard) // Protegemos todas las rutas
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class FeriadosController {
   constructor(private readonly feriadosService: FeriadosService) {}
 
   @Post()
-  @Roles(Role.ADMIN) // Solo los administradores pueden crear
+  @Roles(Role.ADMIN)
   create(@Body() createFeriadoDto: CreateFeriadoDto) {
     return this.feriadosService.create(createFeriadoDto);
   }
 
-  @Get() // Todos los usuarios autenticados pueden ver los feriados
+  @Get()
   findAll() {
     return this.feriadosService.findAll();
   }

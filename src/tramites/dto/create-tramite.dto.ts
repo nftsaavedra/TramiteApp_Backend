@@ -36,12 +36,9 @@ export class CreateTramiteDto {
   @IsOptional()
   prioridad?: PrioridadTramite;
 
-  // CAMBIO: Renombrado a fechaRecepcion. Debe incluir hora.
   @IsDateString()
   @IsNotEmpty()
   fechaRecepcion: string;
-
-  // --- IDs de Relaciones ---
 
   @IsString()
   @IsNotEmpty()

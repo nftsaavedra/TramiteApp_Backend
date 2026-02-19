@@ -30,7 +30,6 @@ export class TiposDocumentoController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    // --- CORREGIDO: Se eliminó el '+' de '+id' ---
     return this.tiposDocumentoService.findOne(id);
   }
 
@@ -39,13 +38,11 @@ export class TiposDocumentoController {
     @Param('id') id: string,
     @Body() updateTiposDocumentoDto: UpdateTiposDocumentoDto,
   ) {
-    // --- CORREGIDO: Se eliminó el '+' de '+id' ---
     return this.tiposDocumentoService.update(id, updateTiposDocumentoDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    // --- CORREGIDO: Se eliminó el '+' de '+id' ---
     return this.tiposDocumentoService.remove(id);
   }
 }

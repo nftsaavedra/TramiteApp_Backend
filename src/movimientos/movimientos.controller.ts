@@ -1,5 +1,3 @@
-// En: src/movimientos/movimientos.controller.ts
-
 import {
   Controller,
   Get,
@@ -9,7 +7,6 @@ import {
   Param,
   Delete,
   UseGuards,
-  // 1. Eliminar ParseUUIDPipe de las importaciones
 } from '@nestjs/common';
 import { MovimientosService } from './movimientos.service';
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
@@ -37,13 +34,11 @@ export class MovimientosController {
   }
 
   @Get(':id')
-  // 2. Eliminar el Pipe
   findOne(@Param('id') id: string) {
     return this.movimientosService.findOne(id);
   }
 
   @Patch(':id')
-  // 2. Eliminar el Pipe
   update(
     @Param('id') id: string,
     @Body() updateMovimientoDto: UpdateMovimientoDto,
@@ -52,7 +47,6 @@ export class MovimientosController {
   }
 
   @Delete(':id')
-  // 2. Eliminar el Pipe
   remove(@Param('id') id: string) {
     return this.movimientosService.remove(id);
   }

@@ -206,13 +206,13 @@ export class MovimientosService {
   }
 
   async update(id: string, updateMovimientoDto: UpdateMovimientoDto) {
-    await this.findOne(id);
-    // Aquí iría la lógica de actualización si se permitiera editar movimientos
-    return `This action updates a #${id} movimiento`;
+    throw new BadRequestException(
+      'La edición de movimientos no está permitida.',
+    );
   }
 
   async remove(id: string) {
-    throw new Error(
+    throw new BadRequestException(
       'La eliminación de movimientos no está permitida por auditoría.',
     );
   }

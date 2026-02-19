@@ -1,5 +1,3 @@
-// En: src/feriados/dto/create-feriado.dto.ts
-
 import { IsDateString, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class CreateFeriadoDto {

@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
@@ -15,6 +16,8 @@ import { PrismaWhereBuilder } from '@/common/utils/prisma-where.builder';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private prisma: PrismaService,
     private configService: ConfigService,
@@ -140,10 +143,8 @@ export class UsersService {
     id: string,
     updateUserDto: UpdateUserDto,
   ): Promise<Omit<User, 'password'>> {
-    // Verificar existencia previa
     await this.findOne(id);
 
-    // Si se envía password, hashear
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
     }
@@ -176,7 +177,7 @@ export class UsersService {
     const adminPassword = this.configService.get<string>('ADMIN_PASSWORD');
 
     if (!adminEmail || !adminPassword) {
-      console.warn('Credenciales Admin no definidas.');
+      this.logger.warn('Credenciales Admin no definidas.');
       return;
     }
 
@@ -185,7 +186,7 @@ export class UsersService {
       return existingUser;
     }
 
-    console.log('Creando usuario ADMIN...');
+    this.logger.log('Creando usuario ADMIN...');
     const adminDto: CreateUserDto = {
       email: adminEmail,
       name: '@nftsaavedra',
@@ -203,7 +204,6 @@ export class UsersService {
     return newUser;
   }
 
-  // Helper para errores de Prisma
   private handlePrismaError(error: any, messageCtx: string) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
@@ -218,6 +218,5 @@ export class UsersService {
         throw new NotFoundException(`${messageCtx}: Registro no encontrado.`);
       }
     }
-    // Si no es un error conocido, lo relanzamos o dejamos que Nest lo maneje como 500
   }
 }

@@ -15,12 +15,10 @@ export class OficinasService {
     });
   }
 
-  // --- MÉTODO 'findAll' REFACTORIZADO PARA FILTROS DINÁMICOS ---
   async findAll(query: FindAllOficinasDto) {
     const { nombre, siglas, tipo, tree } = query;
     const wantTree = tree === 'true';
 
-    // Construimos la cláusula 'where' dinámicamente
     const where: Prisma.OficinaWhereInput = {
       isActive: true,
     };
@@ -68,17 +66,14 @@ export class OficinasService {
       return construirArbol(todasLasOficinas);
     }
 
-    // La lista plana ahora está filtrada y contiene la info del padre
     return todasLasOficinas;
   }
 
-  // --- MÉTODO 'findOne' MEJORADO ---
   async findOne(id: string) {
     const oficina = await this.prisma.oficina.findUnique({
       where: { id },
       include: {
         children: {
-          // Incluimos las oficinas hijas activas
           where: { isActive: true },
         },
       },
@@ -91,7 +86,6 @@ export class OficinasService {
   }
 
   async update(id: string, updateOficinaDto: UpdateOficinaDto) {
-    // Primero, verificamos que la oficina exista
     await this.findOne(id);
 
     return this.prisma.oficina.update({
@@ -106,7 +100,7 @@ export class OficinasService {
     return this.prisma.oficina.update({
       where: { id },
       data: {
-        isActive: false, // Eliminación lógica
+        isActive: false,
       },
     });
   }

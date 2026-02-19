@@ -1,7 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { UsersService } from '@/users/users.service'; // <-- CORREGIDO: Se añadió el alias @/
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
+import { UsersService } from '@/users/users.service';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { User, Role } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -10,8 +16,10 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  // 1. Valida si el usuario y la contraseña son correctos
-  async validateUser(email: string, pass: string): Promise<any> {
+  async validateUser(
+    email: string,
+    pass: string,
+  ): Promise<Omit<User, 'password'> | null> {
     const user = await this.usersService.findByEmail(email);
     if (user && (await bcrypt.compare(pass, user.password))) {
       const { password, ...result } = user;
@@ -20,39 +28,35 @@ export class AuthService {
     return null;
   }
 
-  // 2. Genera el token JWT después de una validación exitosa
-  async login(user: any) {
+  async login(user: Omit<User, 'password'> & { oficinaId?: string | null }) {
     const payload = {
       name: user.name,
       email: user.email,
       sub: user.id,
       role: user.role,
-      oficinaId: user.oficinaId, // <-- MEJORA: Añadimos la oficina al token
+      oficinaId: user.oficinaId,
     };
     return {
       access_token: this.jwtService.sign(payload),
     };
   }
 
-  async changePassword(userId: string, changePasswordDto: any) {
+  async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
     const user = await this.usersService.findByIdWithPassword(userId);
 
     if (!user) {
-      throw new Error('Usuario no encontrado');
+      throw new UnauthorizedException('Usuario no encontrado');
     }
 
-    // 1. Verificar contraseña actual
     const isPasswordValid = await bcrypt.compare(
       changePasswordDto.currentPassword,
       user.password,
     );
 
     if (!isPasswordValid) {
-      throw new Error('La contraseña actual es incorrecta');
+      throw new BadRequestException('La contraseña actual es incorrecta');
     }
 
-    // 2. Hashear nueva contraseña y actualizar
-    // UsersService.update hashea si se le pasa password
     return this.usersService.update(userId, {
       password: changePasswordDto.newPassword,
     });

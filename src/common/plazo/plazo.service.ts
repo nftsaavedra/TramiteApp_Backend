@@ -1,10 +1,9 @@
-// En: src/common/plazo/plazo.service.ts
-
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 
 @Injectable()
 export class PlazoService implements OnModuleInit {
+  private readonly logger = new Logger(PlazoService.name);
   private feriados: Set<string> = new Set();
 
   constructor(private readonly prisma: PrismaService) {}
@@ -23,11 +22,11 @@ export class PlazoService implements OnModuleInit {
     const feriadosDb = await this.prisma.feriado.findMany({
       select: { fecha: true },
     });
-    // Guardamos las fechas en formato YYYY-MM-DD para una comparación sencilla
+
     this.feriados = new Set(
       feriadosDb.map((f) => f.fecha.toISOString().split('T')[0]),
     );
-    console.log('Feriados cargados en memoria:', this.feriados.size);
+    this.logger.log(`Feriados cargados en memoria: ${this.feriados.size}`);
   }
 
   /**
@@ -45,18 +44,15 @@ export class PlazoService implements OnModuleInit {
       const diaSemana = fechaActual.getDay();
       const fechaStr = fechaActual.toISOString().split('T')[0];
 
-      // getDay() devuelve 0 para Domingo y 6 para Sábado
       const esFinDeSemana = diaSemana === 0 || diaSemana === 6;
 
       if (!esFinDeSemana && !this.feriados.has(fechaStr)) {
         diasHabiles++;
       }
 
-      // Avanzamos al siguiente día
       fechaActual.setDate(fechaActual.getDate() + 1);
     }
 
-    // Restamos 1 porque no contamos el día de inicio como transcurrido
     return Math.max(0, diasHabiles - 1);
   }
 }

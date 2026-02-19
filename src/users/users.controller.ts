@@ -19,8 +19,8 @@ import { Role } from '@prisma/client';
 import { FindAllUsersDto } from './dto/find-all-users.dto';
 
 @Controller('users')
-@UseGuards(JwtAuthGuard, RolesGuard) // Protegemos todo el controlador
-@Roles(Role.ADMIN) // Solo el ADMIN puede acceder a estos endpoints
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.ADMIN)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
@@ -30,7 +30,7 @@ export class UsersController {
   }
 
   @Get()
-  @Roles(Role.ADMIN) // Seguridad: Solo admins ven listado completo
+  @Roles(Role.ADMIN)
   findAll(@Query() query: FindAllUsersDto) {
     return this.usersService.findAll(query);
   }

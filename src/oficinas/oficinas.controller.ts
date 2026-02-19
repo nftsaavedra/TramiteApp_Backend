@@ -22,29 +22,21 @@ export class OficinasController {
     return this.oficinasService.create(createOficinaDto);
   }
 
-  // --- MÉTODO ACTUALIZADO ---
-  // Acepta el query param 'tree'
   @Get()
-findAll(@Query() query: FindAllOficinasDto) {
-  return this.oficinasService.findAll(query);
-}
+  findAll(@Query() query: FindAllOficinasDto) {
+    return this.oficinasService.findAll(query);
+  }
 
-  // --- CORREGIDO ---
-  // Se eliminó el '+' de '+id'
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.oficinasService.findOne(id);
   }
 
-  // --- CORREGIDO ---
-  // Se eliminó el '+' de '+id'
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateOficinaDto: UpdateOficinaDto) {
     return this.oficinasService.update(id, updateOficinaDto);
   }
 
-  // --- CORREGIDO ---
-  // Se eliminó el '+' de '+id'
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.oficinasService.remove(id);

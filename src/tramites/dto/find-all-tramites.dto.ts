@@ -1,5 +1,3 @@
-// src/tramites/dto/find-all-tramites.dto.ts
-
 import {
   IsEnum,
   IsOptional,
@@ -15,7 +13,6 @@ export class FindAllTramitesDto {
   @IsString()
   q?: string;
 
-  // --- FILTROS MÚLTIPLES ---
   @IsOptional()
   @Transform(({ value }) =>
     typeof value === 'string' ? value.split(',') : value,
@@ -46,7 +43,6 @@ export class FindAllTramitesDto {
   @IsString({ each: true })
   tipoDocumentoId?: string[];
 
-  // 1. Fecha del Documento (Lo que ve el usuario en el papel) - PRIORIDAD
   @IsOptional()
   @IsISO8601()
   fechaRecepcionDesde?: string;
@@ -55,7 +51,6 @@ export class FindAllTramitesDto {
   @IsISO8601()
   fechaRecepcionHasta?: string;
 
-  // 2. Fecha de Registro (Cuándo se cargó en el sistema) - AUDITORÍA
   @IsOptional()
   @IsISO8601()
   creadoDesde?: string;
@@ -64,7 +59,6 @@ export class FindAllTramitesDto {
   @IsISO8601()
   creadoHasta?: string;
 
-  // --- PAGINACIÓN Y ORDEN ---
   @IsOptional()
   page?: string;
 

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { CreateTramiteDto } from './dto/create-tramite.dto';
 import { UpdateTramiteDto } from './dto/update-tramite.dto';
@@ -22,6 +23,8 @@ type EstadoPlazo = 'VENCIDO' | 'POR_VENCER' | 'A_TIEMPO' | 'NO_APLICA';
 
 @Injectable()
 export class TramitesService {
+  private readonly logger = new Logger(TramitesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly plazoService: PlazoService,
@@ -100,7 +103,7 @@ export class TramitesService {
       const [field, direction] = sortBy.split(':');
       const validFields = [
         'fechaIngreso',
-        'fechaRecepcion', // CAMBIO
+        'fechaRecepcion',
         'prioridad',
         'estado',
         'numeroDocumento',
@@ -171,7 +174,7 @@ export class TramitesService {
       numeroDocumento,
       asunto,
       copiasIds,
-      fechaRecepcion, // CAMBIO: Usamos este campo
+      fechaRecepcion,
       ...tramiteData
     } = createTramiteDto;
 
@@ -199,7 +202,6 @@ export class TramitesService {
       );
     }
 
-    // Convertimos el string ISO a Date
     const fechaRecepcionDate = new Date(fechaRecepcion);
 
     if (tipoRegistro === 'ENVIO') {
@@ -220,7 +222,7 @@ export class TramitesService {
               tipoDocumentoId,
               oficinaRemitenteId: oficinaUsuarioId!,
               oficinaDestinoId: oficinaDestinoId,
-              fechaRecepcion: fechaRecepcionDate, // CAMBIO
+              fechaRecepcion: fechaRecepcionDate,
               copias:
                 copiasIds && copiasIds.length > 0
                   ? { connect: copiasIds.map((id) => ({ id })) }
@@ -239,7 +241,7 @@ export class TramitesService {
               asunto: asunto,
               nombreDocumentoCompleto: nombreDocumentoCompleto,
               notas: 'Inicio de trámite (Envío).',
-              fechaMovimiento: fechaRecepcionDate, // Usamos la fecha seleccionada
+              fechaMovimiento: fechaRecepcionDate,
             },
           });
 
@@ -255,7 +257,6 @@ export class TramitesService {
       if (!oficinaRemitenteId)
         throw new BadRequestException('Falta oficina remitente.');
 
-      // OBTENER OFICINA ROOT OBLIGATORIA
       const rootSiglas =
         this.configService.get<string>('ROOT_OFFICE_SIGLAS') || 'VPIN';
       const rootOffice = await this.prisma.oficina.findUnique({
@@ -274,7 +275,6 @@ export class TramitesService {
 
       try {
         return await this.prisma.$transaction(async (tx) => {
-          // 1. Crear el Trámite
           const tram = await tx.tramite.create({
             data: {
               ...tramiteData,
@@ -283,31 +283,30 @@ export class TramitesService {
               nombreDocumentoCompleto,
               tipoDocumentoId,
               oficinaRemitenteId,
-              oficinaDestinoId: oficinaRecepcionId, // SIEMPRE va a Root/Mesa de Partes
+              oficinaDestinoId: oficinaRecepcionId,
               fechaRecepcion: fechaRecepcionDate,
               estado: EstadoTramite.EN_PROCESO,
             },
           });
 
-          // 2. Crear Movimiento de Ingreso (Trazabilidad Inicial)
           await tx.movimiento.create({
             data: {
               tramiteId: tram.id,
               tipoAccion: TipoAccion.RECEPCION,
               usuarioCreadorId: user.id,
-              oficinaOrigenId: oficinaRemitenteId, // Viene de fuera
-              oficinaDestinoId: oficinaRecepcionId, // Entra a Root
+              oficinaOrigenId: oficinaRemitenteId,
+              oficinaDestinoId: oficinaRecepcionId,
               asunto: asunto,
               nombreDocumentoCompleto: nombreDocumentoCompleto,
               notas: 'Ingreso por Mesa de Partes (Recepción).',
-              fechaMovimiento: fechaRecepcionDate, // Usamos la fecha de recepción real
+              fechaMovimiento: fechaRecepcionDate,
             },
           });
 
           return tram;
         });
       } catch (e) {
-        console.error(e);
+        this.logger.error('Error en creación de trámite', e);
         throw new InternalServerErrorException('Error al crear recepción.');
       }
     }
@@ -343,7 +342,7 @@ export class TramitesService {
       include: {
         oficinaRemitente: true,
         tipoDocumento: true,
-        oficinaDestino: { select: { id: true, nombre: true, siglas: true } }, // Ubicación actual maestra
+        oficinaDestino: { select: { id: true, nombre: true, siglas: true } },
         usuarioAsignado: true,
         copias: true,
         movimientos: {
@@ -373,8 +372,6 @@ export class TramitesService {
     return { ...tramite, plazo: { diasTranscurridos, estado: estadoPlazo } };
   }
 
-  // --- FINALIZACIÓN Y ARCHIVO ---
-
   async finalizar(id: string, contenido: string, usuario: User) {
     const tramite = await this.prisma.tramite.findUnique({
       where: { id },
@@ -393,13 +390,11 @@ export class TramitesService {
       throw new BadRequestException('El trámite no está EN_PROCESO.');
     }
 
-    // Simplificación Segura: Validamos que el trámite haya llegado a algún lado.
     const ultimoMovimiento = tramite.movimientos[0];
     if (!ultimoMovimiento) {
       throw new BadRequestException('El trámite no tiene movimientos.');
     }
 
-    // Actualizamos el trámite
     const tramiteActualizado = await this.prisma.tramite.update({
       where: { id },
       data: {
@@ -408,12 +403,11 @@ export class TramitesService {
       },
     });
 
-    // Auditoría: Crear Anotación de Cierre
     await this.prisma.anotacion.create({
       data: {
         contenido: `TRÁMITE FINALIZADO: ${contenido}`,
         tramiteId: id,
-        movimientoId: ultimoMovimiento.id, // Vinculamos al último paso
+        movimientoId: ultimoMovimiento.id,
         autorId: usuario.id,
       },
     });
@@ -438,22 +432,20 @@ export class TramitesService {
       throw new BadRequestException('El trámite no está EN_PROCESO.');
     }
 
-    // Actualizamos el trámite
     const tramiteActualizado = await this.prisma.tramite.update({
       where: { id },
       data: {
         estado: 'ARCHIVADO',
         fechaCierre: new Date(),
-        observaciones: contenido, // Guardamos también en observaciones del trámite como resumen
+        observaciones: contenido,
       },
     });
 
-    // Auditoría: Crear Anotación de Archivo
     await this.prisma.anotacion.create({
       data: {
         contenido: `TRÁMITE ARCHIVADO: ${contenido}`,
         tramiteId: id,
-        movimientoId: tramite.movimientos[0]?.id, // Vinculamos al último paso si existe
+        movimientoId: tramite.movimientos[0]?.id,
         autorId: usuario.id,
       },
     });
@@ -470,13 +462,15 @@ export class TramitesService {
   }
 
   async remove(id: string) {
-    throw new Error('Eliminación no permitida. Use Archivar o Cerrar.');
+    throw new BadRequestException(
+      'Eliminación no permitida. Use Archivar o Cerrar.',
+    );
   }
 
   private getPlazoInfo(tramite: {
     estado: string;
     movimientos: { createdAt: Date; fechaMovimiento?: Date }[];
-    fechaRecepcion: Date; // CAMBIO
+    fechaRecepcion: Date;
     fechaIngreso: Date;
   }) {
     if (tramite.estado !== 'EN_PROCESO' && tramite.estado !== 'ABIERTO') {
