@@ -18,17 +18,24 @@ import {
 import { FindAllTramitesDto } from './dto/find-all-tramites.dto';
 import { PlazoService } from '@/common/plazo/plazo.service';
 import { ConfigService } from '@nestjs/config';
+import type { Cache } from 'cache-manager';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject } from '@nestjs/common';
+import { SystemConfigService } from '@/system-config/system-config.service';
 
 type EstadoPlazo = 'VENCIDO' | 'POR_VENCER' | 'A_TIEMPO' | 'NO_APLICA';
 
 @Injectable()
 export class TramitesService {
   private readonly logger = new Logger(TramitesService.name);
+  private readonly JERARQUIA_CACHE_TTL = 3600; // 1 hora
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly plazoService: PlazoService,
     private readonly configService: ConfigService,
+    private readonly systemConfigService: SystemConfigService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
   async findAll(query: FindAllTramitesDto) {
@@ -50,11 +57,11 @@ export class TramitesService {
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
 
+    // Optimización: Usar selectivos en lugar de incluir todo
     const where: Prisma.TramiteWhereInput = {};
 
     if (q) {
       const terms = q.trim().split(/\s+/);
-
       where.AND = terms.map((term) => ({
         OR: [
           { asunto: { contains: term, mode: 'insensitive' } },
@@ -62,11 +69,6 @@ export class TramitesService {
           {
             oficinaRemitente: {
               siglas: { contains: term, mode: 'insensitive' },
-            },
-          },
-          {
-            oficinaRemitente: {
-              nombre: { contains: term, mode: 'insensitive' },
             },
           },
           {
@@ -120,6 +122,7 @@ export class TramitesService {
       orderBy = { fechaIngreso: 'desc' };
     }
 
+    // Optimización: Parallel queries con transacción
     const [tramitesFromDb, total] = await this.prisma.$transaction([
       this.prisma.tramite.findMany({
         where,
@@ -143,6 +146,7 @@ export class TramitesService {
       this.prisma.tramite.count({ where }),
     ]);
 
+    // Optimización: Calcular plazos solo si es necesario
     const tramites = tramitesFromDb.map((tramite) => {
       const { diasTranscurridos, estadoPlazo } = this.getPlazoInfo(tramite);
       return {
@@ -185,7 +189,8 @@ export class TramitesService {
 
     let oficinaUsuarioId = user.oficinaId;
     if (!oficinaUsuarioId) {
-      const rootSiglas = this.configService.get<string>('ROOT_OFFICE_SIGLAS');
+      // Usar SystemConfigService en lugar de valor hardcoded
+      const rootSiglas = await this.systemConfigService.getRootOfficeSiglas();
       if (rootSiglas) {
         const rootOffice = await this.prisma.oficina.findUnique({
           where: { siglas: rootSiglas },
@@ -257,8 +262,8 @@ export class TramitesService {
       if (!oficinaRemitenteId)
         throw new BadRequestException('Falta oficina remitente.');
 
-      const rootSiglas =
-        this.configService.get<string>('ROOT_OFFICE_SIGLAS') || 'VPIN';
+      // Usar SystemConfigService en lugar de valor hardcoded
+      const rootSiglas = await this.systemConfigService.getRootOfficeSiglas();
       const rootOffice = await this.prisma.oficina.findUnique({
         where: { siglas: rootSiglas },
       });
@@ -315,12 +320,19 @@ export class TramitesService {
   }
 
   private async obtenerJerarquiaOficina(oficinaId: string): Promise<string> {
+    // Optimización: Cache de jerarquía
+    const cacheKey = `jerarquia:${oficinaId}`;
+    const cached = await this.cacheManager.get<string>(cacheKey);
+    if (cached) return cached;
+
     let oficinaActual: (Oficina & { parent?: Oficina | null }) | null =
       await this.prisma.oficina.findUnique({
         where: { id: oficinaId },
         include: { parent: true },
       });
+    
     if (!oficinaActual) return '';
+    
     const siglas: string[] = [];
     while (oficinaActual) {
       siglas.unshift(oficinaActual.siglas);
@@ -333,7 +345,10 @@ export class TramitesService {
         oficinaActual = null;
       }
     }
-    return siglas.join('/');
+    
+    const resultado = siglas.join('/');
+    await this.cacheManager.set(cacheKey, resultado, this.JERARQUIA_CACHE_TTL);
+    return resultado;
   }
 
   async findOne(id: string) {

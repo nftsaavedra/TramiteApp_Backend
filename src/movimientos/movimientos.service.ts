@@ -8,12 +8,14 @@ import { UpdateMovimientoDto } from './dto/update-movimiento.dto';
 import { PrismaService } from '@/prisma/prisma.service';
 import { Oficina, EstadoTramite, TipoAccion, type User } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
+import { SystemConfigService } from '@/system-config/system-config.service';
 
 @Injectable()
 export class MovimientosService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly systemConfigService: SystemConfigService,
   ) {}
 
   async create(createMovimientoDto: CreateMovimientoDto, user: User) {
@@ -44,9 +46,8 @@ export class MovimientosService {
       oficinaOrigenId =
         ultimoMovimiento.oficinaDestinoId || ultimoMovimiento.oficinaOrigenId;
     } else {
-      // Si es el primer movimiento, el origen es la Oficina Raíz (VPIN/Mesa de Partes)
-      const siglasOficinaRaiz =
-        this.configService.get<string>('ROOT_OFFICE_SIGLAS') || 'VPIN';
+      // Si es el primer movimiento, el origen es la Oficina Raíz
+      const siglasOficinaRaiz = await this.systemConfigService.getRootOfficeSiglas();
       const oficinaRaiz = await this.prisma.oficina.findUnique({
         where: { siglas: siglasOficinaRaiz },
       });
@@ -79,8 +80,7 @@ export class MovimientosService {
 
     // Default destino para RECEPCION
     if (tipoAccion === TipoAccion.RECEPCION && !oficinaDestinoId) {
-      const siglasOficinaRaiz =
-        this.configService.get<string>('ROOT_OFFICE_SIGLAS') || 'VPIN';
+      const siglasOficinaRaiz = await this.systemConfigService.getRootOfficeSiglas();
       const oficinaRaiz = await this.prisma.oficina.findUnique({
         where: { siglas: siglasOficinaRaiz },
       });

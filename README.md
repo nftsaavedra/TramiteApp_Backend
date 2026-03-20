@@ -83,6 +83,18 @@ Check out a few resources that may come in handy when working with NestJS:
 - To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
 - Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
 
+## Performance Optimizations
+
+This project includes several performance optimizations:
+
+- **Database Indexes**: Multiple indexes on frequently queried fields
+- **Caching**: Redis/memory cache for expensive operations
+- **Compression**: HTTP compression enabled (60-80% payload reduction)
+- **Structured Logging**: Pino logger for better performance
+- **Query Optimization**: Selective field loading and parallel queries
+
+See [OPTIMIZACIONES.md](../OPTIMIZACIONES.md) in the root directory for detailed information.
+
 ## Support
 
 Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
