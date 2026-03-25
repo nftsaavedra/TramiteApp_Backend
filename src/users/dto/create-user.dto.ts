@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  IsBoolean,
 } from 'class-validator';
 import { Role } from '@prisma/client';
 import { Transform } from 'class-transformer';
@@ -32,4 +33,8 @@ export class CreateUserDto {
   @IsOptional()
   @Transform(({ value }) => (value === '' ? null : value))
   oficinaId?: string | null;
+
+  @IsBoolean()
+  @IsOptional()
+  mustChangePassword?: boolean;
 }

@@ -31,6 +31,8 @@ export class UsersService {
         data: {
           ...createUserDto,
           password: hashedPassword,
+          // Nuevos usuarios deben cambiar contraseña en primer login
+          mustChangePassword: createUserDto.mustChangePassword ?? true,
         },
       });
 

@@ -55,7 +55,7 @@ export class AuthService {
     }
   }
 
-  async login(user: Omit<User, 'password'> & { oficinaId?: string | null }) {
+  async login(user: Omit<User, 'password'> & { oficinaId?: string | null; mustChangePassword?: boolean }) {
     try {
       const payload = {
         name: user.name,
@@ -67,6 +67,7 @@ export class AuthService {
       
       return {
         access_token: this.jwtService.sign(payload),
+        mustChangePassword: user.mustChangePassword ?? false,
         message: 'Autenticación exitosa',
       };
     } catch (error) {
@@ -93,8 +94,10 @@ export class AuthService {
       throw new BadRequestException('La contraseña actual es incorrecta');
     }
 
+    // Actualizar password y setear mustChangePassword a false
     return this.usersService.update(userId, {
       password: changePasswordDto.newPassword,
+      mustChangePassword: false,
     });
   }
 }
