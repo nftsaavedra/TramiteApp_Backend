@@ -9,6 +9,10 @@ import {
 } from '@nestjs/common';
 import { SystemConfigService } from './system-config.service';
 import { IsOptional, IsString, MinLength } from 'class-validator';
+import { RolesGuard } from '@/common/guards/roles/roles.guard';
+import { JwtAuthGuard } from '@/common/guards/jwt-auth/jwt-auth.guard';
+import { Roles } from '@/common/decorators/roles/roles.decorator';
+import { Role } from '@prisma/client';
 
 export class InitializeSystemConfigDto {
   @IsString()
@@ -37,14 +41,15 @@ export class UpdateSystemConfigDto {
 }
 
 @Controller('system-config')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SystemConfigController {
   constructor(
     private readonly systemConfigService: SystemConfigService,
   ) {}
 
   @Get()
+  @Roles(Role.SUPERUSER, Role.ADMIN)
   async getConfig() {
-    // TODO: Agregar validación de roles cuando esté disponible el decorator
     const config = await this.systemConfigService.getConfig();
     return {
       data: config,
@@ -81,8 +86,8 @@ export class SystemConfigController {
   }
 
   @Post('update')
+  @Roles(Role.SUPERUSER)
   async updateConfig(@Body() updateDto: UpdateSystemConfigDto) {
-    // TODO: Validar que sea SUPERUSER
     const updatedConfig = await this.systemConfigService.updateConfig({
       rootOfficeName: updateDto.rootOfficeName,
       rootOfficeSiglas: updateDto.rootOfficeSiglas,
