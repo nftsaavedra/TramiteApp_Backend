@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { CreateOficinaDto } from './dto/create-oficina.dto';
 import { UpdateOficinaDto } from './dto/update-oficina.dto';
 import { PrismaService } from '@/prisma/prisma.service';
@@ -95,7 +95,15 @@ export class OficinasService {
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const oficina = await this.findOne(id);
+
+    // Verificar si es la oficina raíz del sistema
+    const systemConfig = await this.prisma.systemConfig.findFirst();
+    if (systemConfig && systemConfig.rootOfficeSiglas === oficina.siglas) {
+      throw new ConflictException(
+        `No se puede eliminar la oficina raíz "${oficina.nombre}" (${oficina.siglas}). Esta oficina está protegida por ser la configuración principal del sistema.`
+      );
+    }
 
     return this.prisma.oficina.update({
       where: { id },
