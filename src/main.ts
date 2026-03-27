@@ -21,7 +21,7 @@ async function bootstrap() {
   app.use(helmet());
 
   // Optimización 4: CORS configurado
-  const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+  const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174';
   const allowedOrigins = corsOrigin.split(',').map(origin => origin.trim());
   
   app.enableCors({
@@ -30,7 +30,7 @@ async function bootstrap() {
       if (!origin) return callback(null, true);
       
       // Verificar si el origen está en la lista permitida
-      if (allowedOrigins.indexOf(origin) !== -1 || origin === 'http://localhost:5173' || origin === 'http://127.0.0.1:5173') {
+      if (allowedOrigins.indexOf(origin) !== -1 || origin === 'http://localhost:5173' || origin === 'http://localhost:5174' || origin === 'http://127.0.0.1:5173' || origin === 'http://127.0.0.1:5174') {
         callback(null, true);
       } else {
         callback(new Error('No allowed by CORS'));
