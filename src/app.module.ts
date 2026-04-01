@@ -16,9 +16,39 @@ import { redisStore } from 'cache-manager-redis-yet';
 import { LoggerModule } from 'nestjs-pino';
 import { StatusModule } from './status/status.module';
 import { SystemConfigModule } from './system-config/system-config.module';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 @Module({
   imports: [
+    // Sirve frontend React desde /public/ con fallback automático a index.html para SPA routing
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'public'),  // ← process.cwd() para ruta absoluta
+      serveRoot: '/',
+      exclude: ['/api/*path'],  // Excluir rutas de API (path-to-regexp v8 requiere nombre)
+      serveStaticOptions: {
+        index: 'index.html',  // Fallback automático para SPA
+        maxAge: 3600000,
+        cacheControl: true,
+        setHeaders: (res, path) => {
+          if (path.endsWith('index.html')) {
+            res.setHeader('Cache-Control', 'no-cache')
+          }
+        },
+      },
+    }),
+    
+    // Fallback para SPA routing - captura TODAS las rutas no-API y sirve index.html
+    // Esto es CRÍTICO para TanStack Router - sin esto, al recargar /login da 404
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'public'),
+      serveRoot: '/*path',  // Wildcard para todas las rutas (sintaxis v8 requiere nombre)
+      exclude: ['/api/*path'],
+      serveStaticOptions: {
+        index: 'index.html',
+      },
+    }),
+    
     ConfigModule.forRoot({ isGlobal: true }),
     // Optimización: Logging estructurado con Pino
     LoggerModule.forRoot(),
