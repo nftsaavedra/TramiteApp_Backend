@@ -3,6 +3,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
+import { validationSchema } from './config/env.validation';
 import { OficinasModule } from './oficinas/oficinas.module';
 import { TiposDocumentoModule } from './tipos-documento/tipos-documento.module';
 import { TramitesModule } from './tramites/tramites.module';
@@ -18,6 +19,8 @@ import { StatusModule } from './status/status.module';
 import { SystemConfigModule } from './system-config/system-config.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -49,7 +52,21 @@ import { join } from 'path';
       },
     }),
     
-    ConfigModule.forRoot({ isGlobal: true }),
+    // Optimización: Rate Limiting global (protección contra abuso y fuerza bruta)
+    ThrottlerModule.forRoot([{
+      ttl: 60000,  // 1 minuto
+      limit: 20,   // 20 requests por minuto por IP
+    }]),
+    
+    // Validación de variables de entorno con Joi
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema,
+      validationOptions: {
+        allowUnknown: true,
+        abortEarly: false, // Mostrar todos los errores de una vez
+      },
+    }),
     // Optimización: Logging estructurado con Pino
     LoggerModule.forRoot(),
     // Optimización: Cache global (Memoria por defecto, Redis opcional)
@@ -89,6 +106,7 @@ import { join } from 'path';
     DashboardModule,
     StatusModule,
     SystemConfigModule,
+    HealthModule,
   ],
 })
 export class AppModule {}

@@ -253,7 +253,7 @@ export class TramitesService {
           return tram;
         });
       } catch (e) {
-        console.error(e);
+        // Log estructurado con Pino en lugar de console.error
         throw new InternalServerErrorException('Error al crear envío.');
       }
     }

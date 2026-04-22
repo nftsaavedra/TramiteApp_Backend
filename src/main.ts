@@ -15,6 +15,39 @@ async function bootstrap() {
   // Logging estructurado con Pino
   app.useLogger(app.get(PinoLogger));
 
+  // Seguridad: Helmet configura headers HTTP seguros por defecto
+  // Incluye: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, etc.
+  app.use(helmet());
+
+  // Compresión de respuestas para mejor rendimiento
+  app.use(compression());
+
+  // Content-Security-Policy personalizado (más estricto que el default de Helmet)
+  app.use((req, res, next) => {
+    // CSP para prevenir XSS y data injection
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' ws: wss: https:; frame-ancestors 'none';"
+    );
+    
+    // Prevenir clickjacking
+    res.setHeader('X-Frame-Options', 'DENY');
+    
+    // Prevenir MIME type sniffing
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    
+    // Referrer Policy
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    
+    // Permissions Policy (anteriormente Feature-Policy)
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), payment=()'
+    );
+    
+    next();
+  });
+
   // CORS inteligente: estricto en desarrollo, permisivo en producción
   const isProduction = process.env.NODE_ENV === 'production'
   const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174,http://localhost:3000'
